@@ -1,0 +1,184 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/deploy.yaml
+# https://REDACTED.redhat.com/REDACTED/flask-basic-proxy/blob/master/config/container-config.yaml
+
+
+apiVersion: v1
+kind: Template
+parameters:
+
+- name: APP_NAME  # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+  description: The application name used to group the template's objects.
+  required: true
+
+- name: APP_NAME_FLAG
+  description: Addition to the name to differentiate from an identical app; use for redundancy.
+
+# - name: APP_DESCRIPTION
+  # description: The description of the app being implemented by this template
+  # required: true
+
+- name: OPENSHIFT_NAMESPACE
+  description: The OpenShift project that the template is being applied to
+  required: true
+  value: visor
+
+- name: REPO_BRANCH
+  description: git branch in the repo
+  required: true
+  value: develop
+
+- name: IMAGE_SOURCE_FOUNDATION
+  description: The first portion of the image tag name
+  required: true
+  value: REDACTED.redhat.com
+
+# - name: TEMPLATE_TRIGGERED_BY
+#   description: The user that is commiting this OC command to create the template
+#   required: true
+
+# - name: OPENSHIFT_URL_SUFFIX
+#   description: The ending of any exposed route
+#   required: true
+#   value: .REDACTED.redhat.com
+  
+- name: REPLICAS
+  description: Number of pods (three is required by managed plat standards)
+  required: true
+  value: '3'
+
+- name: CPU
+  description: Processing power per pod
+  required: true
+  value: 000m
+
+- name: MEMORY
+  description: RAM per pod
+  required: true
+  value: 000Mi
+
+# unused parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+- name: IMAGE
+- name: NAME_SPACE
+- name: BRANCH
+- name: QA_SECRET_SWITCH
+- name: REGISTRY_SECRET
+
+
+metadata:
+  name: ${APP_NAME}
+  annotations:
+    # description: ${APP_DESCRIPTION}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  # createdBy: ${TEMPLATE_TRIGGERED_BY}
+  app: ${APP_NAME}
+  
+
+objects:
+
+  - kind: Service  # necessary for the route's port
+    apiVersion: v1
+    metadata:
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: ${APP_NAME}-tls
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      ports:
+        - name: 000-tcp
+          port: 000
+          protocol: TCP
+          targetPort: 000
+      selector:
+          deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+
+  - kind: Route  # allows access by URL
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      port:
+          targetPort: 000-tcp
+      tls:
+        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: ${APP_NAME}
+        weight: 000
+      wildcardPolicy: None
+
+  - kind: DeploymentConfig
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      replicas: ${{REPLICAS}}
+      selector:
+        deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+      strategy:
+        resources: {}
+        rollingParams:
+          intervalSeconds: 1
+          maxSurge: 25%
+          maxUnavailable: 25%
+          timeoutSeconds: 000
+          updatePeriodSeconds: 1
+        type: Rolling
+      template:
+        metadata:
+          labels:
+            deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+        spec:
+          dnsPolicy: ClusterFirst
+          securityContext:
+            supplementalGroups:
+              - 000  # I don't know what this is for.
+          restartPolicy: Always
+          terminationGracePeriodSeconds: 30
+          volumes:
+            - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+              secret:
+                secretName: ${APP_NAME}-tls
+                defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                items:
+                  - path: tls.crt
+                    key: tls.crt
+                  - path: tls.key
+                    key: tls.key
+
+          containers:
+          - name: ${APP_NAME}${APP_NAME_FLAG}
+            image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${REPO_BRANCH}
+            imagePullPolicy: Always
+            command: ["/bin/bash", "./run.sh"]
+            resources:
+              limits:  # limits chosen arbitrarily
+                cpu: ${CPU}
+                memory: ${MEMORY}
+            ports:
+              - containerPort: 000
+                protocol: TCP
+            livenessProbe:
+              failureThreshold: 3
+              periodSeconds: 10
+              successThreshold: 1
+              tcpSocket:
+                port: 000
+              timeoutSeconds: 60
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /health
+                port: 000
+                scheme: HTTPS
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 60
+            volumeMounts:
+              - name: REDACTED
+                mountPath: /opt/app-root/cert  # I did not need to create this file, it was already in openshift

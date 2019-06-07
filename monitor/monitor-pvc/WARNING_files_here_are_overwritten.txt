@@ -1,0 +1,3 @@
+because a PVC is mounted at this folder, all the files created here from the Build are wiped.
+
+I keep this folder in the repo anyways because when I test locally I don't want the files failing.

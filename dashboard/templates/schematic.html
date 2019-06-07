@@ -1,0 +1,50 @@
+<!-- 
+    The sources for the HTML schematics can be found at:
+    https://drive.google.com/drive/folders/0B0LryoafwBu2aUJhUU0zOUw1Qk0 
+
+    To replace them with the latest version:
+    - Open the "MO - ViSOR - Schematic" file
+    - Click "File" > "Export as" > "HTML..."
+    - Uncheck the "Layers" and "Lightbox" checkboxes
+    - "Export"
+    - Drag the exported file into this folder (no name change necessary)
+-->
+
+{% extends "bootstrap/base.html" %}
+
+{% block styles %}
+<!-- Necessary so that my style.css is in addition to the base.html rather than replacing: https://stackoverflow.com/questions/000/adding-google-fonts-to-flask -->
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename= 'style.css') }}">
+<link href='https://fonts.googleapis.com/css?family=Overpass:000' rel='stylesheet' type='text/css'>
+{% endblock %}
+
+{% block navbar %}
+{{nav.mynavbar.render()}}
+{% endblock %}
+
+
+{% block title %}MO ViSOR - Schematic{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>MO ViSOR Schematic</h1>
+    {% if detail_level == "low-level" %}
+        {% include 'MO - ViSOR - Schematic (detailed).html' %}
+        <!-- Can't include an iframe of the draw.io itself because draw.io doesn't support a read-only view -->
+        <!-- <iframe frameborder="0" style="width:000%;height:000px;" src="https://www.draw.io/#G1vI31cLQg8vD-v000qOP__j2TFKUowRiA"></iframe> -->
+        <!-- Though this was a close solution (but not because Drive would still require viewers to authorize): https://www.draw.io/?chrome=0&nav=1&page=-1#G1vI31cLQg8vD-v000qOP__j2TFKUowRiA -->
+    {% else %}
+        {% include 'MO - ViSOR - Schematic.html' %}
+    {% endif %}
+        <br>
+        The MO Schematic is an attempt at capturing the full extent of Marketing Operations infrastructure. <br>
+        Do not expect this to be a full picture, but do expect change. <br>
+        <br>
+        The top left of the diagram will show tools to interact with the diagram, most importantly being the layers.
+        <br>
+        <br>
+        <br>
+        <br>
+</div>
+{% endblock content %}

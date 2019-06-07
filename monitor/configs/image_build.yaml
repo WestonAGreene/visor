@@ -1,0 +1,94 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/build.yaml
+
+# Why a template?
+#   Allowed me to use the REDACTED
+#   Reduced copy paste errors as I could adjust a variable in one place; if I had split into each their own yaml, I'd need custom processing
+#   made more visible the customized variables
+# Why not pass the arguments to the parameters upon execution?
+#   I didn't want to modify REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+
+apiVersion: v1
+kind: Template
+parameters:
+# - name: TEMPLATE_TRIGGERED_BY  # The user that is commiting this OC command to create the template; not possible with the REDACTED
+- name: APP_NAME  # The application name used to group the template's objects. # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy; which is determined by the JJB parameter
+- name: IMAGE_BASE_URI  # The uri of the base image in red hat container catalog https://access.redhat.com/containers; ex. REDACTED.redhat.com/rhscl/python-36-rhel7
+  value: REDACTED.redhat.com/rhscl/python-36-rhel7
+# - name: MEMORY # RAM per pod; ex. 000Mi
+#   value: 1Gi
+- name: OPENSHIFT_NAMESPACE   # The OpenShift project that the template is being applied to
+  value: visor
+- name: REPO_URI
+  value: https://REDACTED.redhat.com/REDACTED/visor.git
+- name: REPO_SECRET_NAME  # Name of secret to contain the credentials to pull from project repo
+  value: REDACTED
+- name: IMAGE_S2I_SECRET  # The secret used by the builder to access the registry
+  value: REDACTED # REDACTED  # this secret was created automatically for me
+- name: IMAGE_SOURCE_FOUNDATION  # The first portion of the image tag name
+  value: REDACTED.redhat.com
+# - name: OPENSHIFT_URL_SUFFIX  # The ending of any exposed route
+#   value: .REDACTED.redhat.com
+# - name: REPLICAS  # Number of pods (three is required by managed plat standards)
+#   value: '1'  # needs qoutes to be treated as string
+# - name: CPU  # Processing power per pod
+#   value: 000m  # limits chosen arbitrarily
+
+#  parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+# Why not use the parameters already in DeployApp? I didn't like the naming convention
+- name: IMAGE
+- name: NAME_SPACE
+- name: BRANCH  # git branch in the repo  # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy; which is determined by the JJB parameter
+- name: QA_SECRET_SWITCH
+- name: OUTPUT_IMAGE
+- name: REGISTRY_SECRET
+
+
+metadata:
+  name: ${APP_NAME}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  app: ${APP_NAME}
+  namespace: ${OPENSHIFT_NAMESPACE}
+
+
+objects:
+
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    name: ${APP_NAME}
+    namespace: ${OPENSHIFT_NAMESPACE}
+    annotations:
+      template.alpha.openshift.io/wait-for-ready: "true"
+  spec:
+    output:
+      to:
+        kind: DockerImage
+        name: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+      pushSecret:
+        name: ${IMAGE_S2I_SECRET}
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      contextDir: /${APP_NAME}
+      git:
+        ref: ${BRANCH}
+        uri: ${REPO_URI}
+      sourceSecret:
+        name: ${REPO_SECRET_NAME}
+      type: Git
+      noCache: true  # I added this in hopes that I'd be able to trigger a new build and it'd pull the latest commit rather than the first commit that the build used.
+    strategy:
+      sourceStrategy:
+        env:
+          - name: HTTP_PROXY  # Looks like this mojo doc says it's required by OHC: https://REDACTED.redhat.com/docs/DOC-000
+            value: REDACTED.redhat.com:000
+          - name: HTTPS_PROXY
+            value: REDACTED.redhat.com:000
+        from:
+          kind: DockerImage
+          name: ${IMAGE_BASE_URI}
+      type: Source

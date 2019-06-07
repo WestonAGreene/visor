@@ -1,0 +1,4995 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/deploy.yaml
+# https://REDACTED.redhat.com/REDACTED/flask-basic-proxy/blob/master/config/container-config.yaml
+
+# Why a template?
+#   Allowed me to use the REDACTED
+#   Reduced copy paste errors as I could adjust a variable in one place; if I had split into each their own yaml, I'd need custom processing
+#   made more visible the customized variables
+# Why not pass the arguments to the parameters upon execution?
+#   I didn't want to modify REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+
+
+apiVersion: v1
+kind: Template
+parameters:
+- name: APP_NAME  # The application name used to group the template's objects. # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+- name: APP_NAME_FLAG  # Addition to the name to differentiate from an identical app; use for redundancy. # Intentionally blank for now
+- name: MEMORY_PVC # RAM per pod; ex. 000Mi
+  value: 000Mi 
+- name: CPU  # Processing power per pod
+  value: '0.5'  # limits chosen arbitrarily
+- name: OPENSHIFT_NAMESPACE   # The OpenShift project that the template is being applied to
+  value: visor
+- name: IMAGE_BASE_URI  # The uri of the base image in red hat container catalog https://access.redhat.com/containers; ex. REDACTED.redhat.com/rhscl/python-36-rhel7
+  # value: grafana/grafana  # TODO validate these images
+  # value: openshift3/grafana
+  value: rhceph/rhceph-3-dashboard-rhel7  # https://access.redhat.com/containers/?tab=tech-details#/REDACTED.redhat.com/rhceph/rhceph-3-dashboard-rhel7
+# - name: OPENSHIFT_URL_SUFFIX  # The ending of any exposed route
+#   value: .REDACTED.redhat.com
+- name: REPLICAS  # Number of pods (three is required by managed plat standards)
+  value: '3'  # needs qoutes to be treated as string
+
+
+# parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+# Why not use the parameters already in DeployApp? I didn't like the naming convention
+- name: BRANCH
+- name: IMAGE
+- name: NAME_SPACE
+- name: QA_SECRET_SWITCH
+- name: REGISTRY_SECRET
+
+
+metadata:
+  labels:
+    app: ${APP_NAME}
+  name: ${APP_NAME}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  namespace: ${OPENSHIFT_NAMESPACE}
+  app: ${APP_NAME}
+
+
+objects:
+
+  - kind: Service  # necessary for the route's port
+    apiVersion: v1
+    metadata:
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: ${APP_NAME}-tls
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      ports:
+        - name: 000-tcp
+          port: 000
+          protocol: TCP
+          targetPort: 000
+      selector:
+          deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+
+
+  - kind: Route  # allows access by URL
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      port:
+          targetPort: 000-tcp
+      tls:
+        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: ${APP_NAME}
+        weight: 000
+      wildcardPolicy: None
+
+  - kind: PersistentVolumeClaim
+    apiVersion: v1
+    metadata:
+      labels:
+        app: ${APP_NAME} 
+        name: ${APP_NAME}${APP_NAME_FLAG}
+      name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+    spec:
+      storageClassName: glusterfs-storage
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${MEMORY_PVC}
+
+
+  - kind: DeploymentConfig
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      replicas: ${{REPLICAS}}
+      selector:
+        deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+      strategy:
+        resources: {}
+        rollingParams:
+          intervalSeconds: 1
+          maxSurge: 25%
+          maxUnavailable: 25%
+          timeoutSeconds: 000
+          updatePeriodSeconds: 1
+        type: Rolling
+      template:
+        metadata:
+          labels:
+            deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+        spec:
+          dnsPolicy: ClusterFirst
+          securityContext:
+            supplementalGroups:
+              - 000  # I don't know what this is for.
+          restartPolicy: Always
+          terminationGracePeriodSeconds: 30
+          volumes:
+            - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+              secret:
+                secretName: ${APP_NAME}-tls
+                defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                items:
+                  - path: tls.crt
+                    key: tls.crt
+                  - path: tls.key
+                    key: tls.key
+            - name: REDACTED
+              secret:
+                secretName: REDACTED
+                defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                items:
+                  - path: REDACTED
+                    key: ca.crt
+            - name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+              persistentVolumeClaim:
+                claimName: ${APP_NAME}${APP_NAME_FLAG}-pvc
+            - name: ${APP_NAME}${APP_NAME_FLAG}-config
+              configMap:
+                name: ${APP_NAME}${APP_NAME_FLAG}-config
+            - name: ${APP_NAME}${APP_NAME_FLAG}-datasources
+              configMap:
+                name: ${APP_NAME}${APP_NAME_FLAG}-datasources
+            - name: ${APP_NAME}${APP_NAME_FLAG}-dashboards
+              configMap:
+                name: ${APP_NAME}${APP_NAME_FLAG}-dashboards
+            - name: ${APP_NAME}${APP_NAME_FLAG}-dashboard
+              configMap:
+                name: ${APP_NAME}${APP_NAME_FLAG}-dashboard
+            - name: ${APP_NAME}${APP_NAME_FLAG}-important
+              configMap:
+                name: ${APP_NAME}${APP_NAME_FLAG}-important
+          containers:
+          - name: ${APP_NAME}${APP_NAME_FLAG}
+            image: ${IMAGE_BASE_URI}
+            # image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+            imagePullPolicy: Always
+            # command:
+            #   - /bin/bash
+            #   - ./run.sh  # last command because it will keep terminal focus indefinitely
+            args:
+              - '--config=/etc/grafana/grafana.ini'
+            resources:
+              limits:  # limits chosen arbitrarily
+                cpu: ${CPU}
+                memory: ${MEMORY_PVC}
+              requests:  # setting requests because I think the grafana UI is slow because it doesn't have enough processing  # didn't fix the problem. 000-05-22_17.10
+                cpu: ${CPU}
+                memory: ${MEMORY_PVC}
+            ports:
+              - containerPort: 000
+                protocol: TCP
+            livenessProbe:
+              failureThreshold: 3
+              periodSeconds: 10
+              successThreshold: 1
+              httpGet:
+                path: /
+                port: 000
+                scheme: HTTPS
+              timeoutSeconds: 60
+            # livenessProbe:  # Not sure of the differences between these licenessprobes, but what I do know is that using the tcpSocket created "TLS handshake error from 000.20.28.1:" errors
+            #   failureThreshold: 3
+            #   periodSeconds: 5
+            #   successThreshold: 1
+            #   tcpSocket:
+            #     port: 000
+            #   timeoutSeconds: 60
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /
+                port: 000
+                scheme: HTTPS
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 60
+            volumeMounts:
+              - name: REDACTED
+                mountPath: /opt/app-root/cert  # I did not need to create this file, it was already in openshift  # not sure the significance of this mountpath
+              # - name: REDACTED
+              #   mountPath: /opt/app-root/src/cert/  # >>> import ssl; print(ssl.get_default_verify_paths())
+              - name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+                mountPath: /var/lib/grafana  # https://grafana-visor.REDACTED.redhat.com/admin/settings
+              - name: ${APP_NAME}${APP_NAME_FLAG}-config
+                mountPath: /etc/grafana
+              - name: ${APP_NAME}${APP_NAME_FLAG}-datasources
+                mountPath: /etc/grafana/provisioning/datasources
+              - name: ${APP_NAME}${APP_NAME_FLAG}-dashboards
+                mountPath: /etc/grafana/provisioning/dashboards
+              - name: ${APP_NAME}${APP_NAME_FLAG}-dashboard
+                mountPath: /var/lib/grafana/dashboards/dashboard.json
+                subPath: dashboard.json  # needed to use subpaths to prevent linux mount from wiping the folder: http://blog.andyserver.com/000/02/using-subpath-property-of-openshift-volume-mounts/; https://fedidat.com/50-openshift-partial-configmaps/
+              - name: ${APP_NAME}${APP_NAME_FLAG}-important
+                mountPath: /var/lib/grafana/dashboards/important.json
+                subPath: important.json
+            # env:
+            #   - name: HTTP_PROXY  # TODO add something like grafana.com to the egress rules so that the plugin error doesn't show
+            #     value: REDACTED.redhat.com:000
+            #   - name: HTTPS_PROXY
+            #     value: REDACTED.redhat.com:000
+            #   - name: GF_AUTH_ANONYMOUS_ENABLED  # pulled from the grafana instance in open paas  # I think this allows not needing to log in  # unnecessary as I specify so in the grafana.ini
+            #     value: 'true'
+              # - name: PROMETHEUS_A
+              #   value: https://prom-a-visor.REDACTED.redhat.com
+              # - name: PROMETHEUS_B
+              #   value: https://prom-b-visor.REDACTED.redhat.com
+              # - name: REQUESTS_CA_BUNDLE  # helps with requests.get(), but doesn't help with push_to_gateway()
+                # value: '/opt/app-root/src/custom-cert.pem'
+              # - name: SSL_CERT_FILE  # helps with push_to_gateway() and doesn't break other connections, like liveness probe, so long as the other certs have been copied into the custom-cert.pem file
+                # value: '/opt/app-root/src/custom-cert.pem'
+
+
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}-config
+    data:
+      # example: https://github.com/openshift/origin/blob/master/examples/grafana/grafana.yaml#L000
+      # https://grafana.com/docs/administration/provisioning/#datasources?utm_source=grafana_ds_list
+      grafana.ini: |            
+        [server]
+        protocol = https
+        cert_file = /opt/app-root/cert/tls.crt
+        cert_key = /opt/app-root/cert/tls.key
+
+        [security]
+        admin_user = admin
+        admin_password = admin
+        login_remember_days = 000
+
+        [auth.anonymous]
+        enabled = true
+
+        [users]
+        default_theme = light
+
+        [paths]
+        provisioning = /etc/grafana/provisioning
+
+        # [log]
+        # level = debug
+
+
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}-datasources
+    # https://grafana.com/docs/administration/provisioning/#datasources?utm_source=grafana_ds_list
+    # https://ops.tips/blog/initialize-grafana-with-preconfigured-dashboards/
+    data:
+      datasources.yml: |-           
+        apiVersion: 1
+        datasources:
+        - name: prom-a
+          type: prometheus
+          access: proxy
+          url: http://prom-a.visor.svc:000
+          editable: true
+          isDefault: true
+        - name: prom-b
+          type: prometheus
+          access: proxy
+          url: http://prom-b.visor.svc:000
+          editable: true
+
+
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}-dashboards
+    data:
+      dashboards.yml: |-
+        apiVersion: 1
+        providers:
+        - name: 'default'
+          type: file
+          folder: ''
+          options:
+            path: /var/lib/grafana/dashboards
+
+
+  # an alternative is to use the API to POST the dashboards: https://grafana.com/docs/http_api/dashboard/
+  # and if we go that route, we could also set one of those dashboards as default home page: https://grafana.com/docs/http_api/preferences/#update-current-org-prefs
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}-dashboard
+    data:
+      dashboard.json: |-
+        {
+          "annotations": {
+            "list": [
+              {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 000, 000, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+              }
+            ]
+          },
+          "editable": true,
+          "gnetId": null,
+          "graphTooltip": 0,
+          "id": 2,
+          "links": [],
+          "panels": [
+            {
+              "aliasColors": {},
+              "bars": true,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": null,
+              "decimals": 0,
+              "fill": 1,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+              },
+              "id": 13,
+              "legend": {
+                "alignAsTable": true,
+                "avg": false,
+                "current": true,
+                "hideEmpty": false,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": false,
+              "linewidth": 1,
+              "links": [],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": true,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "ALERTS{alertstate=\"firing\"}",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "legendFormat": "{{exported_job}}--{{original_name}}",
+                  "refId": "A"
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "6h",
+              "timeShift": null,
+              "title": "Alerts recently?",
+              "tooltip": {
+                "shared": true,
+                "sort": 2,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "decimals": 0,
+                  "format": "short",
+                  "label": "Count of alerts",
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "decimals": null,
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": true,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": null,
+              "decimals": 0,
+              "fill": 1,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+              },
+              "id": 14,
+              "legend": {
+                "alignAsTable": true,
+                "avg": false,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": true,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": false,
+              "linewidth": 1,
+              "links": [],
+              "nullPointMode": "null as zero",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": true,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_url\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",original_name!=\"script_duration_seconds\",original_name!=\"next_expected_unixtime\",__name__!=\"RUN_LAST_SECONDS_AGO\",__name__!=\"RUN_NEXT_SECONDS_AGO\",__name__!=\"std_dev\", alertname=\"\",monitor=\"true\"}",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "legendFormat": "{{original_name}}",
+                  "refId": "A"
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "6h",
+              "timeShift": null,
+              "title": "Have any sites been down recently?",
+              "tooltip": {
+                "shared": true,
+                "sort": 2,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "decimals": 0,
+                  "format": "short",
+                  "label": "Count of alerts",
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "decimals": null,
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "cacheTimeout": null,
+              "colorBackground": false,
+              "colorValue": false,
+              "colors": [
+                "#000c46",
+                "rgba(000, 000, 40, 0.89)",
+                "#d44a3a"
+              ],
+              "datasource": null,
+              "format": "short",
+              "gauge": {
+                "maxValue": 000,
+                "minValue": 0,
+                "show": false,
+                "thresholdLabels": false,
+                "thresholdMarkers": true
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+              },
+              "id": 4,
+              "interval": null,
+              "links": [],
+              "mappingType": 1,
+              "mappingTypes": [
+                {
+                  "name": "value to text",
+                  "value": 1
+                },
+                {
+                  "name": "range to text",
+                  "value": 2
+                }
+              ],
+              "maxDataPoints": 000,
+              "nullPointMode": "connected",
+              "nullText": null,
+              "postfix": "",
+              "postfixFontSize": "50%",
+              "prefix": "",
+              "prefixFontSize": "50%",
+              "rangeMaps": [
+                {
+                  "from": "null",
+                  "text": "N/A",
+                  "to": "null"
+                }
+              ],
+              "sparkline": {
+                "fillColor": "rgba(31, 000, 000, 0.18)",
+                "full": false,
+                "lineColor": "rgb(31, 000, 000)",
+                "show": true
+              },
+              "tableColumn": "",
+              "targets": [
+                {
+                  "expr": "avg({exported_job=\"visor_eloqua_cdo_contacts_uploads_members\",__name__=\"crtd\"}) by (exported_job, __name__)",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "refId": "A"
+                }
+              ],
+              "thresholds": "",
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Records from uploads in the past 24 hours",
+              "type": "singlestat",
+              "valueFontSize": "000%",
+              "valueMaps": [
+                {
+                  "op": "=",
+                  "text": "N/A",
+                  "value": "null"
+                }
+              ],
+              "valueName": "current"
+            },
+            {
+              "cacheTimeout": null,
+              "colorBackground": false,
+              "colorValue": false,
+              "colors": [
+                "#000c46",
+                "rgba(000, 000, 40, 0.89)",
+                "#d44a3a"
+              ],
+              "datasource": null,
+              "format": "short",
+              "gauge": {
+                "maxValue": 000,
+                "minValue": 0,
+                "show": false,
+                "thresholdLabels": false,
+                "thresholdMarkers": true
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+              },
+              "id": 5,
+              "interval": null,
+              "links": [],
+              "mappingType": 1,
+              "mappingTypes": [
+                {
+                  "name": "value to text",
+                  "value": 1
+                },
+                {
+                  "name": "range to text",
+                  "value": 2
+                }
+              ],
+              "maxDataPoints": 000,
+              "nullPointMode": "connected",
+              "nullText": null,
+              "postfix": "",
+              "postfixFontSize": "50%",
+              "prefix": "",
+              "prefixFontSize": "50%",
+              "rangeMaps": [
+                {
+                  "from": "null",
+                  "text": "N/A",
+                  "to": "null"
+                }
+              ],
+              "sparkline": {
+                "fillColor": "rgba(31, 000, 000, 0.18)",
+                "full": false,
+                "lineColor": "rgb(31, 000, 000)",
+                "show": true
+              },
+              "tableColumn": "",
+              "targets": [
+                {
+                  "expr": "avg(integration_form_dynamic_form) by (__name__)",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "refId": "A"
+                }
+              ],
+              "thresholds": "",
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Dynamic Form submissions in the past 24 hours",
+              "type": "singlestat",
+              "valueFontSize": "000%",
+              "valueMaps": [
+                {
+                  "op": "=",
+                  "text": "N/A",
+                  "value": "null"
+                }
+              ],
+              "valueName": "current"
+            },
+            {
+              "cacheTimeout": null,
+              "colorBackground": false,
+              "colorValue": false,
+              "colors": [
+                "#000c46",
+                "rgba(000, 000, 40, 0.89)",
+                "#d44a3a"
+              ],
+              "datasource": null,
+              "format": "short",
+              "gauge": {
+                "maxValue": 000,
+                "minValue": 0,
+                "show": false,
+                "thresholdLabels": false,
+                "thresholdMarkers": true
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+              },
+              "id": 7,
+              "interval": null,
+              "links": [],
+              "mappingType": 1,
+              "mappingTypes": [
+                {
+                  "name": "value to text",
+                  "value": 1
+                },
+                {
+                  "name": "range to text",
+                  "value": 2
+                }
+              ],
+              "maxDataPoints": 000,
+              "nullPointMode": "connected",
+              "nullText": null,
+              "postfix": "",
+              "postfixFontSize": "50%",
+              "prefix": "",
+              "prefixFontSize": "50%",
+              "rangeMaps": [
+                {
+                  "from": "null",
+                  "text": "N/A",
+                  "to": "null"
+                }
+              ],
+              "sparkline": {
+                "fillColor": "rgba(31, 000, 000, 0.18)",
+                "full": false,
+                "lineColor": "rgb(31, 000, 000)",
+                "show": true
+              },
+              "tableColumn": "",
+              "targets": [
+                {
+                  "expr": "avg(cntcts_eng_sta_most_active_24_hrs) by (__name__)",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "refId": "A"
+                }
+              ],
+              "thresholds": "",
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Contacts that have been active in the past 24 hours",
+              "type": "singlestat",
+              "valueFontSize": "000%",
+              "valueMaps": [
+                {
+                  "op": "=",
+                  "text": "N/A",
+                  "value": "null"
+                }
+              ],
+              "valueName": "current"
+            },
+            {
+              "cacheTimeout": null,
+              "colorBackground": false,
+              "colorValue": false,
+              "colors": [
+                "#000c46",
+                "rgba(000, 000, 40, 0.89)",
+                "#d44a3a"
+              ],
+              "datasource": null,
+              "format": "short",
+              "gauge": {
+                "maxValue": 000,
+                "minValue": 0,
+                "show": false,
+                "thresholdLabels": false,
+                "thresholdMarkers": true
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+              },
+              "id": 8,
+              "interval": null,
+              "links": [],
+              "mappingType": 1,
+              "mappingTypes": [
+                {
+                  "name": "value to text",
+                  "value": 1
+                },
+                {
+                  "name": "range to text",
+                  "value": 2
+                }
+              ],
+              "maxDataPoints": 000,
+              "nullPointMode": "connected",
+              "nullText": null,
+              "postfix": "",
+              "postfixFontSize": "50%",
+              "prefix": "",
+              "prefixFontSize": "50%",
+              "rangeMaps": [
+                {
+                  "from": "null",
+                  "text": "N/A",
+                  "to": "null"
+                }
+              ],
+              "sparkline": {
+                "fillColor": "rgba(31, 000, 000, 0.18)",
+                "full": false,
+                "lineColor": "rgb(31, 000, 000)",
+                "show": true
+              },
+              "tableColumn": "",
+              "targets": [
+                {
+                  "expr": "avg(cntcts_eng_sta_inactive_24_hrs) by (__name__)",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "refId": "A"
+                }
+              ],
+              "thresholds": "",
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Contacts that have become unmarketable (inactive) in the past 24 hours",
+              "type": "singlestat",
+              "valueFontSize": "000%",
+              "valueMaps": [
+                {
+                  "op": "=",
+                  "text": "N/A",
+                  "value": "null"
+                }
+              ],
+              "valueName": "current"
+            },
+            {
+              "cacheTimeout": null,
+              "colorBackground": false,
+              "colorValue": false,
+              "colors": [
+                "#000c46",
+                "rgba(000, 000, 40, 0.89)",
+                "#d44a3a"
+              ],
+              "datasource": null,
+              "format": "short",
+              "gauge": {
+                "maxValue": 000,
+                "minValue": 0,
+                "show": false,
+                "thresholdLabels": false,
+                "thresholdMarkers": true
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 24
+              },
+              "id": 9,
+              "interval": null,
+              "links": [],
+              "mappingType": 1,
+              "mappingTypes": [
+                {
+                  "name": "value to text",
+                  "value": 1
+                },
+                {
+                  "name": "range to text",
+                  "value": 2
+                }
+              ],
+              "maxDataPoints": 000,
+              "nullPointMode": "connected",
+              "nullText": null,
+              "postfix": "",
+              "postfixFontSize": "50%",
+              "prefix": "",
+              "prefixFontSize": "50%",
+              "rangeMaps": [
+                {
+                  "from": "null",
+                  "text": "N/A",
+                  "to": "null"
+                }
+              ],
+              "sparkline": {
+                "fillColor": "rgba(31, 000, 000, 0.18)",
+                "full": false,
+                "lineColor": "rgb(31, 000, 000)",
+                "show": true
+              },
+              "tableColumn": "",
+              "targets": [
+                {
+                  "expr": "avg(cntcts_crtd_last_24_hrs) by (__name__)",
+                  "format": "time_series",
+                  "intervalFactor": 1,
+                  "refId": "A"
+                }
+              ],
+              "thresholds": "",
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Contacts created in the past 24 hours",
+              "type": "singlestat",
+              "valueFontSize": "000%",
+              "valueMaps": [
+                {
+                  "op": "=",
+                  "text": "N/A",
+                  "value": "null"
+                }
+              ],
+              "valueName": "current"
+            }
+          ],
+          "refresh": false,
+          "schemaVersion": 16,
+          "style": "dark",
+          "tags": [],
+          "templating": {
+            "list": []
+          },
+          "time": {
+            "from": "now-7d",
+            "to": "now"
+          },
+          "timepicker": {
+            "hidden": false,
+            "refresh_intervals": [
+              "5s",
+              "10s",
+              "30s",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h",
+              "2h",
+              "1d"
+            ],
+            "time_options": [
+              "5m",
+              "15m",
+              "1h",
+              "6h",
+              "12h",
+              "24h",
+              "2d",
+              "7d",
+              "30d"
+            ]
+          },
+          "timezone": "",
+          "title": "Dashboard",
+          "uid": "4u9KzOiZk",
+          "version": 18
+        }
+
+
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}-important
+    data:
+      important.json: |-
+        {
+          "annotations": {
+            "list": [
+              {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 000, 000, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+              }
+            ]
+          },
+          "editable": true,
+          "gnetId": null,
+          "graphTooltip": 0,
+          "id": 6,
+          "links": [],
+          "panels": [
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "decimals": 0,
+              "description": "0 is good. 1 means the alert is active.",
+              "fill": 2,
+              "gridPos": {
+                "h": 4,
+                "w": 24,
+                "x": 0,
+                "y": 0
+              },
+              "height": "000",
+              "hideTimeOverride": false,
+              "id": 14,
+              "legend": {
+                "alignAsTable": true,
+                "avg": false,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/alerts"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/rules"
+                }
+              ],
+              "nullPointMode": "null as zero",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": true,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "ALERTS{alertstate=\"firing\"}",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{exported_job}}--{{original_name}}",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "7d",
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Active Alerts",
+              "tooltip": {
+                "shared": true,
+                "sort": 2,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": "0",
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Custom Data Objects (CDOs)",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 4
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of records created.\n\nINXPO is our virtual event management vendor.\n\nc.ix_created will not match the count returned by DATA_HOURLY_ELOQUA_FORMS_created{exported_job=\"integration_form_inxpo\"} because form submissions include both new records and modifications to current records.\n\nEvery time there is a non-unique pair of show key and offer, the alert remains active for 24 hours after the data was received (meaning if an event was watched on monday and on-demand submissions continued to be received until Friday, we would receive alerts all week despite how there may have been only one non-unique pair).",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 11
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_DAILY_ELOQUA_INXPO_health"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_vivastream\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\", alertname=\"\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Vivastream",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of records created.\n\nINXPO is our virtual event management vendor.\n\nc.ix_created will not match the count returned by DATA_HOURLY_ELOQUA_FORMS_created{exported_job=\"integration_form_inxpo\"} because form submissions include both new records and modifications to current records.\n\nEvery time there is a non-unique pair of show key and offer, the alert remains active for 24 hours after the data was received (meaning if an event was watched on monday and on-demand submissions continued to be received until Friday, we would receive alerts all week despite how there may have been only one non-unique pair).",
+              "fill": 1,
+              "gridPos": {
+                "h": 12,
+                "w": 24,
+                "x": 0,
+                "y": 21
+              },
+              "height": "000px",
+              "id": 15,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_DAILY_ELOQUA_INXPO_health"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inxpo\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.INXPO",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 33
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=~\"visor_eloqua_cdo_contacts_leadtype\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.LeadType",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of records created.\n\nINXPO is our virtual event management vendor.\n\nc.ix_created will not match the count returned by DATA_HOURLY_ELOQUA_FORMS_created{exported_job=\"integration_form_inxpo\"} because form submissions include both new records and modifications to current records.\n\nEvery time there is a non-unique pair of show key and offer, the alert remains active for 24 hours after the data was received (meaning if an event was watched on monday and on-demand submissions continued to be received until Friday, we would receive alerts all week despite how there may have been only one non-unique pair).",
+              "fill": 1,
+              "gridPos": {
+                "h": 12,
+                "w": 24,
+                "x": 0,
+                "y": 43
+              },
+              "height": "000px",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_DAILY_ELOQUA_INXPO_health"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\",__name__!~\"srcofupld.*\",__name__!~\"formsource.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of records created.\n\nINXPO is our virtual event management vendor.\n\nc.ix_created will not match the count returned by DATA_HOURLY_ELOQUA_FORMS_created{exported_job=\"integration_form_inxpo\"} because form submissions include both new records and modifications to current records.\n\nEvery time there is a non-unique pair of show key and offer, the alert remains active for 24 hours after the data was received (meaning if an event was watched on monday and on-demand submissions continued to be received until Friday, we would receive alerts all week despite how there may have been only one non-unique pair).",
+              "fill": 1,
+              "gridPos": {
+                "h": 12,
+                "w": 24,
+                "x": 0,
+                "y": 55
+              },
+              "height": "000px",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_DAILY_ELOQUA_INXPO_health"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__=~\"formsource.*\",__name__!~\"formsource_upload.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries F_FormData_Source1 not upload",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of records created.\n\nINXPO is our virtual event management vendor.\n\nc.ix_created will not match the count returned by DATA_HOURLY_ELOQUA_FORMS_created{exported_job=\"integration_form_inxpo\"} because form submissions include both new records and modifications to current records.\n\nEvery time there is a non-unique pair of show key and offer, the alert remains active for 24 hours after the data was received (meaning if an event was watched on monday and on-demand submissions continued to be received until Friday, we would receive alerts all week despite how there may have been only one non-unique pair).",
+              "fill": 1,
+              "gridPos": {
+                "h": 12,
+                "w": 12,
+                "x": 0,
+                "y": 67
+              },
+              "height": "000px",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_DAILY_ELOQUA_INXPO_health"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__=~\"formsource_upload.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries F_FormData_Source1 from upload",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 12,
+                "y": 67
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "sortDesc": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_cleanup\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!=\"RUN_LAST_SECONDS_AGO\",__name__!=\"RUN_NEXT_SECONDS_AGO\",__name__!=\"std_dev\",__name__!~\"stat__.*\",alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "cdos_marked_for_deletion_cnt",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 79
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__!=\"push_time_seconds\",__name__=~\"srcofupldnot.*membership.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries missingMembership",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Everything Upload",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 89
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 96
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": false,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=~\"visor_eloqua_cdo_contacts_uploads_member.*$\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\",__name__!~\"offer.*\",__name__!~\"tactic.*\",__name__!~\"new_avg_age_mins.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Uploads.Members",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": false,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=~\"visor_eloqua_cdo.*$\",__name__=~\"srcofupld_.*valid.*\",__name__!~\"srcofupld_.*missing_membership.*\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries upload sourced records; valid campaign metrics",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=~\"visor_eloqua_cdo.*$\",__name__=~\"srcofupld_.*missing_membership.*\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries upload sourced records; Campaign missing memberships",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 12,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__=~\"srcofupld_offer.*\",__name__!~\"srcofupld_.*valid.*\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                },
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_inquiries\",__name__=~\"srcofupld_tactic.*\",__name__!~\"srcofupld_.*valid.*\"}",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts.Inquiries upload sourced records; Other campaign metrics",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These should follow each other closely. \nProcessing time of records from Contacts.Uploads.Members to reach Contacts.Inquiries is about 6 hours. If the timespan is larger than that, then processing is slow. \nIf Contacts.Inquiries never reaches the same count as Contacts.Uploads.Members, then processing is losing records.",
+              "fill": 1,
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "srcofupld_crtd",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "Inquiries_{{__name__}}",
+                  "refId": "C",
+                  "step": 000
+                },
+                {
+                  "expr": "{exported_job=\"visor_eloqua_cdo_contacts_uploads_members\",__name__=\"crtd\"}",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "Uploads_{{__name__}}",
+                  "refId": "D",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": null
+                }
+              ],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Uploaded records in Contacts.Uploads.Members compared to Contacts.Inquiries",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "cntcts_crtd_frm_c_uploads_members_last_24_hrs",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contacts created in Eloqua from an upload in the past 24 hours",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 12,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_upload_wizard.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (upload_wizard)",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Eloqua Forms",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_c.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (starts with \"integration_form_c\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 12,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_a.*$\",__name__!=\"integration_form_automated_campaigns\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                },
+                {
+                  "expr": "{__name__=~\"integration_form_d.*$\",__name__!~\"integration_form_dynamic_form.*\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                },
+                {
+                  "expr": "{__name__=~\"integration_form_l.*\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "C",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (starts with \"integration_form_a\" or \"d\" or \"l\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_t.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                },
+                {
+                  "expr": "{__name__=~\"integration_form_v.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "DATA_HOURLY_ELOQUA_FORMS_created (starts with \"intergration_form_t\" or \"v\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 12,
+                "x": 12,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_s.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                },
+                {
+                  "expr": "{__name__=~\"integration_form_i.*$\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "DATA_HOURLY_ELOQUA_FORMS_created (starts with \"intergration_form_s\" or \"i\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.\n\nIn an effort to declutter, I have hidden all metrics that have only had 0 values. To see them, open this metric in Prometheus, where no hide criteria is applied.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_.*\",__name__!~\"integration_form_c.*$\",__name__!~\"integration_form_upload_wizard.*$\",__name__!~\"service.*$\",__name__!~\"notification.*$\",__name__!~\"integration_form_a.*$\",__name__!~\"integration_form_d.*$\",__name__!~\"integration_form_t.*$\",__name__!~\"integration_form_v.*\",__name__!~\"integration_form_s.*\",__name__!~\"integration_form_i.*\",__name__!~\"integration_form_l.*\"}",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (other)",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 8,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"service_form_copyto.*\"}",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (starts with \"service_form_copyto\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 8,
+                "x": 8,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"service_form_sendto.*\"}",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (starts with \"service_form_sendto\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 15,
+                "w": 8,
+                "x": 16,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"service.*\",__name__!~\"service_form_copyto.*\",__name__!~\"service_form_sendto.*\"}",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_form (starts with \"service\")",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours of form submissions for each of these forms.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 6,
+                "x": 18,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": false,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_HOURLY_ELOQUA_FORMS_created"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"integration_form_dynam.*\",__name__=~\".*cnt$\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "B",
+                  "step": 000
+                },
+                {
+                  "expr": "integration_form_dynamic_form",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "integration_form_dynamic_form counts",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# URL Monitoring",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "decimals": 2,
+              "description": "0 is good. 1 means the site is down.",
+              "fill": 2,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "hideTimeOverride": false,
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=DATA_MINUTELY_VISOR_siteDown_all"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null as zero",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": true,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_url\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!=\"RUN_LAST_SECONDS_AGO\",__name__!=\"RUN_NEXT_SECONDS_AGO\",__name__!~\"stat__.*\", alertname=\"\", monitor=\"true\"}",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [
+                {
+                  "colorMode": "critical",
+                  "fill": true,
+                  "line": true,
+                  "op": "gt",
+                  "value": 0
+                }
+              ],
+              "timeFrom": "3d",
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Is URL down",
+              "tooltip": {
+                "shared": true,
+                "sort": 2,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": "0",
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# General Segments",
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_segment\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!=\"RUN_LAST_SECONDS_AGO\",__name__!=\"RUN_NEXT_SECONDS_AGO\",__name__!=\"std_dev\",__name__!~\"stat__.*\",__name__!~\"cntcts_eng_sta_.*\",__name__!=\"cntcts_mdfd_last_24_hrs\", __name__!=\"cntcts_crtd_last_24_hrs\", __name__!=\"cntcts_crtd_frm_c_uploads_members_last_24_hrs\", __name__!=\"cntcts_in_elq\", alertname=\"\"}>=0",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "visor_eloqua_segment",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Engagement Status",
+              "gridPos": {
+                "h": 6,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "sortDesc": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"cntcts_eng_sta_.*24_hrs\"}>=0",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Engagement Status changes in the past 24 hours",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=~\"cntcts_eng_sta_.*\",__name__!~\"cntcts_eng_sta_.*24_hrs\"}>=0",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "All Engagement Statuses together",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Shared Lists",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "sortDesc": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_eloqua_shared_list\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!~\"stat__.*\", alertname=\"\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "3d",
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Shared Lists",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Contact Database",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{__name__=\"cntcts_in_elq\"}",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Total Contacts in Eloqua",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 9,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": false,
+                "show": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "cntcts_crtd_last_24_hrs or cntcts_mdfd_last_24_hrs",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "A",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Contact changes in Eloqua in the past 24 hours",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 10,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "content": "# Other",
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "id": 000,
+              "links": [],
+              "mode": "markdown",
+              "title": "",
+              "type": "text"
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "sortDesc": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "stat__next_runtime__second_ago",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{exported_job}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "3d",
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "stat__next_runtime__second_ago",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            },
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "prom-a",
+              "description": "These metrics are pulled from the past 24 hours.",
+              "fill": 1,
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 000
+              },
+              "height": "000",
+              "id": 000,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "hideEmpty": true,
+                "hideZero": false,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "sortDesc": true,
+                "total": false,
+                "values": true
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [
+                {
+                  "includeVars": false,
+                  "keepTime": false,
+                  "params": "",
+                  "targetBlank": true,
+                  "title": "View in prometheus",
+                  "type": "absolute",
+                  "url": "https://prom-a-visor.REDACTED.redhat.com/graph?g0.range_input=1d&g0.tab=0&g0.expr=%7Bexported_job%3D~\"visor_eloqua_cdo.*%24\"%2C__name__!%3D\"push_time_seconds\"%7D"
+                },
+                {
+                  "targetBlank": true,
+                  "title": "View script code",
+                  "type": "absolute",
+                  "url": "https://REDACTED.redhat.com/REDACTED/visor/tree/develop/monitor"
+                }
+              ],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "{exported_job=\"visor_memory\",__name__!=\"push_time_seconds\",__name__!=\"last_success_unixtime\",__name__!=\"script_duration_seconds\",__name__!=\"next_expected_unixtime\",__name__!=\"stat__next_runtime__second_ago\",__name__!=\"stat__offset\",alertname=\"\"}",
+                  "format": "time_series",
+                  "hide": false,
+                  "intervalFactor": 2,
+                  "legendFormat": "{{__name__}}",
+                  "metric": "",
+                  "refId": "B",
+                  "step": 000
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": "3d",
+              "timeRegions": [],
+              "timeShift": null,
+              "title": "Usage of Persistent Volume Claims in Openshift",
+              "tooltip": {
+                "shared": false,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "decimals": null,
+                  "format": "percent",
+                  "label": null,
+                  "logBase": 1,
+                  "max": "000",
+                  "min": "0",
+                  "show": true
+                },
+                {
+                  "format": "short",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": null,
+                  "show": false
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            }
+          ],
+          "refresh": "5m",
+          "schemaVersion": 16,
+          "style": "dark",
+          "tags": [],
+          "templating": {
+            "list": []
+          },
+          "time": {
+            "from": "now-15d",
+            "to": "now"
+          },
+          "timepicker": {
+            "refresh_intervals": [
+              "5s",
+              "10s",
+              "30s",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h",
+              "2h",
+              "1d"
+            ],
+            "time_options": [
+              "5m",
+              "15m",
+              "1h",
+              "6h",
+              "12h",
+              "24h",
+              "2d",
+              "7d",
+              "30d"
+            ]
+          },
+          "timezone": "browser",
+          "title": "Important",
+          "uid": "x5EfeBWWz",
+          "version": 19
+        }

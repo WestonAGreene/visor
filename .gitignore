@@ -1,0 +1,35 @@
+__pycache__/
+env/
+
+
+# pyenv
+.python-version
+
+# dotenv
+.env
+
+# virtualenv
+*venv/
+ENV/
+
+
+.DS_STORE
+.DS_Store
+
+*.vscode
+
+*.pyc
+
+.csv
+
+testing*
+
+.idea
+
+~$*
+
+/zOld
+/old
+form_definition
+visorGeneralRepoChangeLog.txt
+*(detailed).html

@@ -1,0 +1,42 @@
+{% extends "bootstrap/base.html" %}
+
+{% block styles %}
+<!-- Necessary so that my style.css is in addition to the base.html rather than replacing: https://stackoverflow.com/questions/000/adding-google-fonts-to-flask -->
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename= 'style.css') }}">
+<link href='https://fonts.googleapis.com/css?family=Overpass:000' rel='stylesheet' type='text/css'>
+<link rel="shortcut icon" href="https://raw.githubusercontent.com/prometheus/docs/master/static/favicon.ico">
+{% endblock %}
+
+{% block navbar %}
+{{nav.mynavbar.render()}}
+{% endblock %}
+
+
+{% block title %}MO ViSOR{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>MO ViSOR</h1>
+    Vital Signs and Operational Reports for Marketing Operations
+    <br>
+    {% if branch == "develop" %}
+        <iframe frameborder="0" style="width:000%;height:000px;" src="https://grafana-visor.REDACTED.redhat.com/dashboard/solo/dashboard?kiosk=tv"></iframe>
+        <!-- I tried using the openshift service to access grafana, but it wouldn't render: http://grafana.visor.svc.cluster.local:000/dashboard/solo/dashboard?kiosk=tv -->
+    {% else %}
+        <iframe frameborder="0" style="width:000%;height:000px;" src="https://grafana-visor.REDACTED.eloqua.com/dashboard/solo/dashboard?kiosk=tv"></iframe>
+    {% endif %}
+    <p>
+        <br>
+        <br>
+        <h2>ABOUT</h2>
+        Short URL: red.ht/visor
+        <br>
+        The ViSOR Dashboard is intended only for monitoring--to provide a snapshot of Marketing Operations' system health.
+        <li>A list of the highest level health checks; not a source of all necessary information to address an alert</li>
+        <li>Simplistic in design; not intended for customer use or to be eye catching</li>
+        <li>Indication of the need for analysis; not an analysis per se</li>
+        <li>The far more overwhelming dashboard that the analysts use: <a href="https://grafana-visor.REDACTED.eloqua.com" target="_blank" >grafana-visor.REDACTED.eloqua.com</a></li>
+    </p>
+</div>
+{% endblock %}

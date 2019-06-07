@@ -1,0 +1,83 @@
+{
+  "000": {
+    "name": "Contacts.Inquiries",
+    "data_status_field": "Contacts_Inquiries_S_Data_Status1",
+    "fields": [
+      "DataCardIDExt",
+      "CreatedAt",
+      "UpdatedAt",
+      "Contacts_Inquiries_C_EmailAddress1",
+      "Contacts_Inquiries_A_OfferID1",
+      "Contacts_Inquiries_A_TacticID_External1",
+      "Contacts_Inquiries_F_FormData_Source1",
+      "Contacts_Inquiries_F_FormData_Trigger1"
+    ],
+    "criteria_to_delete": {
+      "Anything older than two years and two months": {
+        "day_range": {
+          "days_ago_oldest": 000,
+          "days_ago_newest": 000
+        }
+      },
+      "Anything older than one year and two months that is an upload or INXPO": {
+        "day_range": {
+          "days_ago_oldest": 000,
+          "days_ago_newest": 000
+        },
+        "other_criteria": [
+          "or",
+          [
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-az"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-1"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-2"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-3"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-4"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-5"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-6"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-7"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-8"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "upload-wizard-integration-9"
+            ],
+            [
+              "Contacts_Inquiries_F_FormData_Source1",
+              "inxpo-integration"
+            ]
+          ]
+        ]
+      }
+    }
+  }
+}

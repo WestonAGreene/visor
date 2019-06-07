@@ -1,0 +1,173 @@
+{
+  "000": { 
+    "name": "Contacts.Inquiries", 
+    "date_field": "UpdatedAt", 
+    "status_field": "Contacts_Inquiries_S_Data_Status1", 
+    "offer_field": "Contacts_Inquiries_A_OfferID1", 
+    "tactic_field": "Contacts_Inquiries_A_TacticID_External1", 
+    "email_field": "Contacts_Inquiries_C_EmailAddress1", 
+    "days_pulled": 2,
+    "cdo_fields": [
+      "Contacts_Inquiries_A_Timestamp1",
+      "Contacts_Inquiries_C_Company1",
+      "Contacts_Inquiries_C_Country1",
+      "Contacts_Inquiries_C_FirstName1",
+      "Contacts_Inquiries_C_LastName1",
+      "Contacts_Inquiries_C_State_Prov1",
+      "Contacts_Inquiries_F_FormData_Source1",
+      "Contacts_Inquiries_F_FormData_Trigger1",
+      "Contacts_Inquiries_S_Offer_Member_ID_Lead1",
+      "Contacts_Inquiries_S_Tactic_Ext_Member_ID_Lead1"
+    ],
+    "custom_fields": [
+      {"name": "C_Company", "statement": "Contact.Field(C_Company)"},
+      {"name": "C_Country", "statement": "Contact.Field(C_Country)"},
+      {"name": "C_DateCreated", "statement": "Contact.Field(C_DateCreated)"},
+      {"name": "C_Do_Not_Contact1", "statement": "Contact.Field(C_Do_Not_Contact1)"},
+      {"name": "C_FirstName", "statement": "Contact.Field(C_FirstName)"},
+      {"name": "C_Has_an_Undeliverable_Email_Address1", "statement": "Contact.Field(C_Has_an_Undeliverable_Email_Address1)"},
+      {"name": "C_Last_Lead_Funnel_Path11", "statement": "Contact.Field(C_Last_Lead_Funnel_Path11)"},
+      {"name": "C_LastName", "statement": "Contact.Field(C_LastName)"},
+      {"name": "C_Partner_Email_Address_Domain1", "statement": "Contact.Field(C_Partner_Email_Address_Domain1)"},
+      {"name": "C_SFDCContactID", "statement": "Contact.Field(C_SFDCContactID)"},
+      {"name": "C_SFDCLeadID", "statement": "Contact.Field(C_SFDCLeadID)"},
+      {"name": "C_State_Prov", "statement": "Contact.Field(C_State_Prov)"},
+      {"name": "C_Timestamp__Last_Entered_Lead_Funnel_Date1", "statement": "Contact.Field(C_Timestamp__Last_Entered_Lead_Funnel_Date1)"},
+      {"name": "C_ZZ___SFDC_Contact_Created_Date1", "statement": "Contact.Field(C_ZZ___SFDC_Contact_Created_Date1)"},
+      {"name": "C_ZZ___SFDC_Lead_Created_Date1", "statement": "Contact.Field(C_ZZ___SFDC_Lead_Created_Date1)"},
+      {"name": "IsBounced", "statement": "Contact.Email.IsBounced"}
+    ]
+  },
+  "000": { 
+    "name": "Contacts.INXPO", 
+    "date_field": "CreatedAt", 
+    "status_field": "Contacts_Inxpo_S_Data_Status1", 
+    "offer_field": "Contacts_Inxpo_A_OfferID1", 
+    "email_field": "Contacts_Inxpo_C_EmailAddress1", 
+    "days_pulled": 000,
+    "cdo_fields": [
+      "UpdatedAt",
+      "Contacts_Inxpo_UDF_07_Answer1"
+    ],
+    "frequency": 12
+  },
+  "000": { 
+    "name": "Contacts.Uploads.Members", 
+    "date_field": "CreatedAt", 
+    "status_field": "Contacts_Uploads_Members_S_Data_Status1", 
+    "offer_field": "Contacts_Inxpo_A_OfferID1", 
+    "tactic_field": "Contacts_Uploads_Members_A_TacticID1", 
+    "email_field": "Contacts_Inxpo_C_EmailAddress1", 
+    "days_pulled": 1,
+    "cdo_fields": [
+      "UpdatedAt",
+      "Contacts_Uploads_Members_A_TrueRespondedDate1",
+      "Contacts_Uploads_C_Pre_qualified11",
+      "Contacts_Members_C_Send_to_Lead_Development11",
+      "Contacts_Uploads_Members_F_FormData_IsLeadAct1",
+      "Contacts_Uploads_Members_QA_IMATESTRECORD1",
+      "Contacts_Uploads_Members_S_Target_FormName1",
+      "Contacts_Uploads_Members_S_Upload_By1",
+      "Contacts_Uploads_Members_S_Upload_File1",
+      "Contacts_Uploads_Members_S_Upload_Name1"
+    ]
+  },
+  "000": { 
+    "name": "Contacts.Vivastream", 
+    "date_field": "CreatedAt", 
+    "status_field": "S_Data_Status1", 
+    "offer_field": "A_OfferID1", 
+    "tactic_field": "A_TacticID_External1", 
+    "email_field": "C_EmailAddress1", 
+    "days_pulled": 1,
+    "cdo_fields": [
+      "C_EmailAddress1",
+      "S_Milestone_01_LastPostedDate1",
+      "Contacts_Vivastream_S_Milestone_01_LastError1",
+      "QA_Imatestrecord1",
+      "UDF_01_Answer1",
+      "UDF_01_Question1",
+      "UpdatedAt"
+    ]
+  },
+  "000": { 
+    "name": "Contacts.Captix", 
+    "date_field": "UpdatedAt", 
+    "status_field": "S_Data_Status1", 
+    "offer_field": "A_OfferID1", 
+    "tactic_field": "A_TacticID_External1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.Indicators", 
+    "date_field": "UpdatedAt", 
+    "status_field": "Contacts_Segments_S_Data_Status1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.LeadType", 
+    "date_field": "UpdatedAt", 
+    "status_field": "Contacts_LeadType_S_Data_Status1", 
+    "offer_field": "Contacts_LeadType_MostRecent_OfferID1", 
+    "tactic_field": "Contacts_LeadType_MostRecent_TacticID1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.LookBookHQ", 
+    "date_field": "UpdatedAt", 
+    "status_field": "S_Data_Status1", 
+    "offer_field": "A_OfferID1", 
+    "tactic_field": "A_TacticID_External1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.Mintigo", 
+    "date_field": "UpdatedAt", 
+    "status_field": "Contacts_Mintigo_Data_Status1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.Seertech", 
+    "date_field": "UpdatedAt", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.SFDC.ConvertedLeads", 
+    "date_field": "UpdatedAt", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.SFDC.LMH", 
+    "date_field": "UpdatedAt", 
+    "status_field": "Contacts_SFDC_LMH_S_Data_Status1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Apps.Notifications", 
+    "date_field": "UpdatedAt", 
+    "offer_field": "Apps_Notifications_A_OfferID1", 
+    "tactic_field": "Apps_Notifications_A_TacticID_External1", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Companies.DemandBase", 
+    "date_field": "UpdatedAt", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Companies.InstallSummary", 
+    "date_field": "UpdatedAt", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.ABM", 
+    "date_field": "UpdatedAt", 
+    "days_pulled": 1
+  },
+  "000": { 
+    "name": "Contacts.Segmentations", 
+    "date_field": "UpdatedAt", 
+    "email_field": "email_address1",
+    "days_pulled": 1
+  }
+}

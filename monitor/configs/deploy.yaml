@@ -1,0 +1,438 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/deploy.yaml
+# https://REDACTED.redhat.com/REDACTED/flask-basic-proxy/blob/master/config/container-config.yaml
+
+# Why a template?
+#   Allowed me to use the REDACTED
+#   Reduced copy paste errors as I could adjust a variable in one place; if I had split into each their own yaml, I'd need custom processing
+#   made more visible the customized variables
+# Why not pass the arguments to the parameters upon execution?
+#   I didn't want to modify REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+
+
+apiVersion: v1
+kind: Template
+parameters:
+- name: APP_NAME  # The application name used to group the template's objects. # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+- name: APP_NAME_FLAG  # Addition to the name to differentiate from an identical app; use for redundancy. # Intentionally blank for now
+# - name: APP_NAME_HOURLY  # Addition to the name to differentiate from an identical app; use for redundancy.
+#   value: -hourly
+# - name: APP_NAME_MINUTELY  # Addition to the name to differentiate from an identical app; use for redundancy.
+#   value: -minutely
+# - name: IMAGE_BASE_URI  # The uri of the base image in red hat container catalog https://access.redhat.com/containers; ex. REDACTED.redhat.com/rhscl/python-36-rhel7
+  # value: prom/prometheus  # TODO validate these images
+# - name: MEMORY_HOURLY # RAM per pod; ex. 000Mi
+#   value: 0.5Gi
+# - name: MEMORY_MINUTELY # RAM per pod; ex. 000Mi
+#   value: 0.25Gi 
+- name: MEMORY_PVC # RAM per pod; ex. 000Mi
+  value: 1Gi 
+- name: CPU  # Processing power per pod
+  value: 000m  # limits chosen arbitrarily
+# - name: SCHEDULE_HOURLY
+#   value: "25 * * * *"  # the 25th minute because I found the idling trigger that  happened every friday at 10pm could take as long as 25 minutes to trigger.; this may be unnecssary now that we're on managed plat.
+# - name: SCHEDULE_MINUTELY
+#   value: "* * * * *"  # the 25th minute because I found the idling trigger that  happened every friday at 10pm could take as long as 25 minutes to trigger.; this may be unnecssary now that we're on managed plat.
+# - name: FREQ_HOURLY
+#   value: "000"  # 60 seconds by 60 minutes equals 000 seconds
+# - name: FREQ_MINUTELY
+#   value: "60"
+- name: OPENSHIFT_NAMESPACE   # The OpenShift project that the template is being applied to
+  value: visor
+# - name: REPO_URI
+- name: IMAGE_SOURCE_FOUNDATION  # The first portion of the image tag name
+  value: REDACTED.redhat.com
+# - name: OPENSHIFT_URL_SUFFIX  # The ending of any exposed route
+#   value: .REDACTED.redhat.com
+- name: REPLICAS  # Number of pods (three is required by managed plat standards)
+  value: '1'  # needs qoutes to be treated as string
+- name: ELOQUA_USER
+  value: ENC[GPG,hQEMAwkqW+hzcpVGAQf/f5fG+Y3LJ9chqPDwx+ZWE35OTsydrNp93JnOCbWisXGl3kGGwgTK7Y43WSqSd2F/OTlL0srt8DP+8DVKl87PzU2KGfQFCrK49vxIaT2QF2r/JPyguNTMmK0kWF2KtXj6Yn4+VJIeNucSWTmKK65cHiNxWPtzucZ000/QNk/alcoW4wDgKypiK7fFG/Ft4z7nWliPEVuQuN1Dfyt0iBWlaKto65UbFsXt3O4NO2X1sQ6E5Gx4H+erghpB3eYO1Xo04C7u9ApVOuu9yNRFf6/AIflFC+bpaBwQXepTWLXplmIHSB6DPgISPFU1CC9j10gUBmhcnk5sKFqYg00VyGDgBtJPAYZEHlGU6/BYJsUSdWJmZhS19A4qtrP17tabJeLrZL6J9XKd1jFzwgQLIqW3OTs1g9TRoLqnA9Cl/9R5vqEe000gsaZQhaXw2BlbHHOo7g==]
+- name: ELOQUA_PASSWORD
+  value: ENC[GPG,hQEMAwkqW+hzcpVGAQf7B/hhDYrm0EJiBxCB/hiYtR8wkVox1ijOvN0a++evkGHcYNuv46qXQjSR91r8W6XjSKUhj9D26UwDbzBvMQlBsXCOoWobDqYGLC1ythxeFDlR+WZ9gbh+v+zJ4+6Ka3bSr6AxI7SXvvxFKRHHYGJ+G8ojEPVMHidIHH59IFUJRJFh4CT/zy9D3uRZMdQz/Say0q1Rk03+m0MLyadpm46hn4wAF6/QrK9TjjW0QMqWaoc6BLlavETaG6f78sou+C8V3BsCakFSATqpHjF4iqCuiqvAJdixSYzsDSkuouRjuuOsN4bwp8mNlA7wC6coEggajeni1jgp7uQiZYHTeByhgNJHAX6VpqUBU000Aiz2rQOj7RGFAQ+t0OJdqaXZg1Ctm5ClZCyKW7MmDXcJjqrtoxCT1JIEUlX4pSaQ9WlceFvReqLnrK3r70=]
+
+
+# parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+# Why not use the parameters already in DeployApp? I didn't like the naming convention
+- name: BRANCH
+- name: IMAGE
+- name: NAME_SPACE
+- name: QA_SECRET_SWITCH
+- name: REGISTRY_SECRET
+
+
+metadata:
+  name: ${APP_NAME}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  namespace: ${OPENSHIFT_NAMESPACE}
+  app: ${APP_NAME}
+
+
+objects:
+
+  - kind: Service  # necessary for the route's port
+    apiVersion: v1
+    metadata:
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: ${APP_NAME}-tls
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      ports:
+        - name: 000-tcp
+          port: 000
+          protocol: TCP
+          targetPort: 000
+      selector:
+          deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+
+  - kind: Route  # allows access by URL
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      port:
+          targetPort: 000-tcp
+      tls:
+        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: ${APP_NAME}
+        weight: 000
+      wildcardPolicy: None
+
+  - kind: PersistentVolumeClaim
+    apiVersion: v1
+    metadata:
+      labels:
+        name: ${APP_NAME}${APP_NAME_FLAG}
+      name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+    spec:
+      storageClassName: glusterfs-storage
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${MEMORY_PVC}
+
+  - kind: Secret
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      labels:
+        name: ${APP_NAME}
+      name: ${APP_NAME}
+    data:
+      ELOQUA_USER: ${ELOQUA_USER}
+      ELOQUA_PASSWORD: ${ELOQUA_PASSWORD}
+
+  - kind: DeploymentConfig
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}${APP_NAME_FLAG}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      replicas: ${{REPLICAS}}
+      selector:
+        deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+      strategy:
+        resources: {}
+        rollingParams:
+          intervalSeconds: 1
+          maxSurge: 25%
+          maxUnavailable: 25%
+          timeoutSeconds: 000
+          updatePeriodSeconds: 1
+        type: Rolling
+      template:
+        metadata:
+          labels:
+            deploymentconfig: ${APP_NAME}${APP_NAME_FLAG}
+        spec:
+          dnsPolicy: ClusterFirst
+          securityContext:
+            supplementalGroups:
+              - 000  # I don't know what this is for.
+          restartPolicy: Always
+          terminationGracePeriodSeconds: 30
+          volumes:
+            - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+              secret:
+                secretName: ${APP_NAME}-tls
+                defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                items:
+                  - path: tls.crt
+                    key: tls.crt
+                  - path: tls.key
+                    key: tls.key
+            # - name: REDACTED
+            #   secret:
+            #     secretName: REDACTED
+            #     defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+            #     items:
+            #       - path: REDACTED
+            #         key: ca.crt
+            - name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+              persistentVolumeClaim:
+                claimName: ${APP_NAME}${APP_NAME_FLAG}-pvc
+            # PVC to monitor:
+            - name: alert-a-pvc
+              persistentVolumeClaim:
+                claimName: alert-a-pvc
+            - name: alert-b-pvc
+              persistentVolumeClaim:
+                claimName: alert-b-pvc
+            - name: pushgate-a-pvc
+              persistentVolumeClaim:
+                claimName: pushgate-a-pvc
+            - name: pushgate-b-pvc
+              persistentVolumeClaim:
+                claimName: pushgate-b-pvc
+            - name: prom-a-pvc
+              persistentVolumeClaim:
+                claimName: prom-a-pvc
+            - name: prom-b-pvc
+              persistentVolumeClaim:
+                claimName: prom-b-pvc
+            - name: grafana-pvc
+              persistentVolumeClaim:
+                claimName: grafana-pvc
+          containers:
+          - name: ${APP_NAME}${APP_NAME_FLAG}
+            image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+            imagePullPolicy: Always
+            command:
+              - /bin/bash
+              - ./run.sh  # last command because it will keep terminal focus indefinitely
+            resources:
+              limits:  # limits chosen arbitrarily
+                cpu: ${CPU}
+                memory: ${MEMORY_PVC}
+            ports:
+              - containerPort: 000
+                protocol: TCP
+            livenessProbe:
+              failureThreshold: 3
+              periodSeconds: 10
+              successThreshold: 1
+              tcpSocket:
+                port: 000
+              timeoutSeconds: 60
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /health
+                port: 000
+                scheme: HTTPS
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 60
+            volumeMounts:
+              - name: REDACTED
+                mountPath: /opt/app-root/cert  # I did not need to create this file, it was already in openshift  # not sure the significance of this mountpath
+              # - name: REDACTED
+              #   mountPath: /opt/app-root/src/cert/  # >>> import ssl; print(ssl.get_default_verify_paths())
+              - name: ${APP_NAME}${APP_NAME_FLAG}-pvc
+                mountPath: /opt/app-root/src/${APP_NAME}${APP_NAME_FLAG}-pvc
+              # PVCs to monitor:
+              - name: alert-a-pvc
+                mountPath: /opt/app-root/src/alert-a-pvc
+              - name: alert-b-pvc
+                mountPath: /opt/app-root/src/alert-b-pvc
+              - name: pushgate-a-pvc
+                mountPath: /opt/app-root/src/pushgate-a-pvc
+              - name: pushgate-b-pvc
+                mountPath: /opt/app-root/src/pushgate-b-pvc
+              - name: prom-a-pvc
+                mountPath: /opt/app-root/src/prom-a-pvc
+              - name: prom-b-pvc
+                mountPath: /opt/app-root/src/prom-b-pvc
+              - name: grafana-pvc
+                mountPath: /opt/app-root/src/grafana-pvc
+            env:
+              # - name: SERVICEACCOUNT_TOKEN
+              #   valueFrom:
+              #     secretKeyRef:
+              #       key: token
+              #       name: visorserviceaccount-token-98f8c 
+              - name: ELOQUA_USER  # created from REDACTED/visor/monitor/configs/secret/secret.yaml
+                valueFrom:
+                  secretKeyRef:
+                    key: ELOQUA_USER
+                    name: ${APP_NAME}${APP_NAME_FLAG}
+              - name: ELOQUA_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: ELOQUA_PASSWORD
+                    name: ${APP_NAME}${APP_NAME_FLAG}
+              # - name: ELOQUA_USER
+              #   value: ${ELOQUA_USER}
+              # - name: ELOQUA_PASSWORD
+              #   value: ${ELOQUA_PASSWORD}
+              - name: ELOQUA_COMPANY
+                value: redhat
+              - name: PUSHGATEWAY_A
+                value: http://pushgate-a.visor.svc.cluster.local:000  # https://manage.us-west.dc.preprod.paas.redhat.com/console/project/visor/browse/services/pushgate-a?tab=details
+              - name: PUSHGATEWAY_B
+                value: http://pushgate-b.visor.svc.cluster.local:000
+              - name: PROMETHEUS_A
+                value: http://prom-a.visor.svc.cluster.local:000
+              - name: PROMETHEUS_B
+                value: http://prom-b.visor.svc.cluster.local:000
+              - name: HTTP_PROXY  # these proxies are necessary for the image_build.yaml, but are not necessary for deployment and allow unnecessary security volnerabiility.
+                value: ""
+              - name: HTTPS_PROXY
+                value: ""
+              # - name: PRINT_OUTPUT
+              #   value: 'True'  # for testing purposes
+              # - name: PROJECT_NAME
+              #   value: preprod
+              # - name: REQUESTS_CA_BUNDLE  # helps with requests.get(), but doesn't help with push_to_gateway()
+              #   value: '/opt/app-root/src/custom-cert.pem'
+              # - name: SSL_CERT_FILE  # helps with push_to_gateway() and doesn't break other connections, like liveness probe, so long as the other certs have been copied into the custom-cert.pem file
+              #   value: '/opt/app-root/src/custom-cert.pem'
+
+      
+
+  # - kind: CronJob
+  #   apiVersion: batch/v1beta1
+  #   metadata:
+  #     name: ${APP_NAME}${APP_NAME_HOURLY}
+  #     labels:
+  #       app: ${APP_NAME}
+  #       job-group: ${APP_NAME}${APP_NAME_HOURLY}
+  #   spec:
+  #     concurrencyPolicy: Forbid
+  #     schedule: ${SCHEDULE_HOURLY}
+  #     jobTemplate:
+  #       spec:
+  #         #  Attempting to add the SSL certs to the cronjob made no difference in my ability to communicate with pushgateway
+  #         # dnsPolicy: ClusterFirst
+  #         # securityContext:
+  #         #   supplementalGroups:
+  #         #     - 000  # I don't know what this is for.
+  #         # volumes:
+  #         #   - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+  #         #     secret:
+  #         #       secretName: ${APP_NAME}-tls
+  #         #       defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+  #         #       items:
+  #         #         - path: tls.crt
+  #         #           key: tls.crt
+  #         #         - path: tls.key
+  #         #           key: tls.key
+  #         template:
+  #           metadata:
+  #             name: ${APP_NAME}${APP_NAME_HOURLY}
+  #             labels:
+  #               job-group: ${APP_NAME}${APP_NAME_HOURLY}
+  #           # volumeMounts:
+  #           #   - name: REDACTED
+  #           #     mountPath: /opt/app-root/cert  # I did not need to create this file, it was already in openshift
+  #           # ports:
+  #           #   - containerPort: 000
+  #           #     protocol: TCP
+  #           spec:
+  #             restartPolicy: Never
+  #             containers:
+  #             - name: ${APP_NAME}${APP_NAME_HOURLY}
+  #               image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+  #               imagePullPolicy: Always
+  #               command: ["/bin/bash", "./app.sh", "${FREQ_HOURLY}"]  # 60 seconds by 60 minutes equals 000 seconds
+  #               # ports:
+  #               #   - containerPort: 000
+  #               #     protocol: TCP
+  #               env:
+  #                 &job-env
+  #                 - name: SERVICEACCOUNT_TOKEN
+  #                   valueFrom:
+  #                     secretKeyRef:
+  #                       key: token
+  #                       name: visorserviceaccount-token-98f8c 
+  #                 - name: ELOQUA_USER  # created from REDACTED/visor/monitor/configs/secret/secret.yaml
+  #                   valueFrom:
+  #                     secretKeyRef:
+  #                       key: ELOQUA_USER
+  #                       name: visorcredentials
+  #                 - name: ELOQUA_PASSWORD
+  #                   valueFrom:
+  #                     secretKeyRef:
+  #                       key: ELOQUA_PASSWORD
+  #                       name: visorcredentials
+  #                 - name: ELOQUA_COMPANY
+  #                   value: redhat
+  #                 - name: PUSHGATEWAY_A
+  #                   value: https://pushgate-a-visor.REDACTED.redhat.com
+  #                 - name: PUSHGATEWAY_B
+  #                   value: https://pushgate-b-visor.REDACTED.redhat.com
+  #                 - name: PROMETHEUS_A
+  #                   value: https://prom-a-visor.REDACTED.redhat.com
+  #                 - name: PROMETHEUS_B
+  #                   value: https://prom-b-visor.REDACTED.redhat.com
+  #                 - name: PRINT_OUTPUT
+  #                   value: 'True'
+  #                 # - name: PROJECT_NAME
+  #                 #   value: preprod
+
+  # - kind: Template  # this template allows running the job manually from openshift
+  #   apiVersion: v1
+  #   parameters:
+  #     - name: JOB_NAME
+  #       genereate: expression
+  #       from: '${APP_NAME}${APP_NAME_HOURLY}-[a-z0-9]{6}'
+  #     - name: USER_NAME
+  #       description: "The user triggering this manual run"
+  #       required: True
+  #   metadata:
+  #     name: ${APP_NAME}${APP_NAME_HOURLY}-job-template
+  #   objects:
+  #     - kind: Job
+  #       apiVersion: batch/v1
+  #       metadata:
+  #         name: ${JOB_NAME}-${USER_NAME}
+  #       spec:
+  #         template:
+  #           metadata:
+  #             name: ${JOB_NAME}
+  #             labels:
+  #               job-group: ${APP_NAME}${APP_NAME_HOURLY}
+  #           spec:
+  #             restartPolicy: Never
+  #             containers:
+  #               - name: ${JOB_NAME}
+  #                 image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+  #                 imagePullPolicy: Always
+  #                 command: ["/bin/bash", "./app.sh"]
+  #                 env:
+  #                   *job-env
+
+  # - kind: CronJob
+  #   apiVersion: batch/v1beta1
+  #   metadata:
+  #     name: ${APP_NAME}${APP_NAME_MINUTELY}
+  #     labels:
+  #       app: ${APP_NAME}
+  #       job-group: ${APP_NAME}${APP_NAME_MINUTELY}
+  #   spec:
+  #     concurrencyPolicy: Forbid
+  #     schedule: ${SCHEDULE_MINUTELY}
+  #     jobTemplate:
+  #       spec:
+  #         template:
+  #           metadata:
+  #             name: ${APP_NAME}${APP_NAME_MINUTELY}
+  #             labels:
+  #               job-group: ${APP_NAME}${APP_NAME_MINUTELY}
+  #           spec:
+  #             restartPolicy: Never
+  #             containers:
+  #             - name: ${APP_NAME}${APP_NAME_MINUTELY}
+  #               image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+  #               imagePullPolicy: Always
+  #               command: ["/bin/bash", "./app.sh", "${FREQ_MINUTELY}"]
+  #               env:
+  #                 *job-env

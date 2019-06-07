@@ -1,0 +1,1572 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/deploy.yaml
+# https://REDACTED.redhat.com/REDACTED/flask-basic-proxy/blob/master/config/container-config.yaml
+
+# Why a template?
+#   Allowed me to use the REDACTED
+#   Reduced copy paste errors as I could adjust a variable in one place; if I had split into each their own yaml, I'd need custom processing
+#   made more visible the customized variables
+# Why not pass the arguments to the parameters upon execution?
+#   I didn't want to modify REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+
+
+apiVersion: v1
+kind: Template
+parameters:
+- name: APP_NAME  # The application name used to group the template's objects. # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+- name: APP_NAME_PROXY
+  value: proxy
+- name: APP_NAME_FLAG_A  # Addition to the name to differentiate from an identical app; use for redundancy.
+  value: -a
+- name: APP_NAME_FLAG_B
+  value: -b
+- name: PROMETHEUS_APP_NAME
+  value: prom
+- name: PROMETHEUS_IMAGE_BASE_URI  # The uri of the base image in red hat container catalog https://access.redhat.com/containers; ex. REDACTED.redhat.com/rhscl/python-36-rhel7
+  value: prom/prometheus  # TODO validate these images
+  # value: openshift3/prometheus  # works, but uses prom 2.3.2, which doesn't have the subquery funcationality that I use in my alerts; there are workarounds, but I'd rather not.
+- name: PROMETHEUS_MEMORY # RAM per pod; ex. 000Mi
+  value: 5.5Gi  # TODO determine whether I should have small pod size and larger PVC size or if they must be equal
+- name: PROMETHEUS_MEMORY_PVC # RAM per pod; ex. 000Mi
+  value: 6Gi
+- name: ALERTMANAGER_APP_NAME
+  value: alert
+- name: ALERTMANAGER_IMAGE_BASE_URI
+  value: prom/alertmanager
+  # value: openshift3/prometheus-alertmanager  # success; no regressions in performance
+- name: ALERTMANAGER_MEMORY
+  value: 0.5Gi
+- name: PUSHGATEWAY_APP_NAME
+  value: pushgate
+- name: PUSHGATEWAY_IMAGE_BASE_URI
+  value: prom/pushgateway
+  # value: bitnami/prometheus-pushgateway  # 'Failed to pull image "bitnami/prometheus-pushgateway": rpc error: code = Unknown desc = Error reading manifest latest in docker.io/bitnami/prometheus-pushgateway: errors: denied: requested access to the resource is denied unauthorized: authentication required'
+- name: PUSHGATEWAY_MEMORY
+  value: 0.5Gi
+- name: CPU
+  value: '0.5'
+- name: OPENSHIFT_NAMESPACE   # The OpenShift project that the template is being applied to
+  value: visor
+# - name: REPO_URI
+- name: IMAGE_SOURCE_FOUNDATION  # The first portion of the image tag name
+  value: REDACTED.redhat.com
+- name: OPENSHIFT_URL_SUFFIX  # The ending of any exposed route
+  value: .REDACTED.eloqua.com
+- name: REPLICAS  # Number of pods (three is required by managed plat standards)
+  value: '1'  # needs qoutes to be treated as string
+- name: SLACK_API_URL_APP_NAME_FLAG_A
+  value: https://hooks.slack.com/services/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  # I'd like to encrypt, but I can't get it to work without secrets and I can't reference a secret in a configmap
+- name: SLACK_API_URL_APP_NAME_FLAG_B
+  value: https://test.slack.com
+
+# unused parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+# Why not use the parameters already in DeployApp? I didn't like the naming convention
+- name: IMAGE
+- name: NAME_SPACE
+- name: BRANCH
+- name: QA_SECRET_SWITCH
+- name: REGISTRY_SECRET
+
+
+metadata:
+  labels:
+    app: ${APP_NAME}
+  name: ${APP_NAME}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  # createdBy: ${TEMPLATE_TRIGGERED_BY}
+  namespace: ${OPENSHIFT_NAMESPACE}
+
+
+objects:
+
+###############################################################  ###############################################################
+############################################################### APP_NAME_FLAG_A ###############################################################
+###############################################################  ###############################################################
+
+  ############################################################### PROMETHEUS_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-tls
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${PROMETHEUS_MEMORY_PVC}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+              deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+          spec:
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-tls
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-yaml
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-yaml
+              - name: ${PROMETHEUS_APP_NAME}-rules-yaml
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}-rules-yaml
+              - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                persistentVolumeClaim:
+                  claimName: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-pvc
+              - name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  cpu: ${CPU}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+              image: ${PROMETHEUS_IMAGE_BASE_URI}
+              args:
+                - '--config.file=/etc/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}.yaml'
+                # - '--storage.tsdb.path=/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}'  # 
+                - '--storage.tsdb.path=/data'  # prometheus continually was losing it's last two hours of timeseries for every restart. I was afraid this was due to my unique file location. /data is the default https://github.com/prometheus/tsdb/issues/000
+                - '--web.external-url=http://localhost:000/'  # not sure why the 1 before the port number (https://www.robustperception.io/adding-basic-auth-to-prometheus-with-nginx)
+                - '--web.route-prefix=/'
+                - '--web.enable-lifecycle'  # https://www.robustperception.io/reloading-prometheus-configuration
+                # - '--web.enable-admin-api'  # will be necessary if I ever choose to use sys_maint_each_deployment.py
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  memory: ${PROMETHEUS_MEMORY} # setting requests because I think the grafana UI is slow because it doesn't have enough processing  # didn't fix the problem. 000-05-22_17.10
+                  cpu: ${CPU}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              # livenessProbe:  # continually fails
+              #   tcpSocket:
+              #     port: 000
+              volumeMounts:
+                - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-yaml
+                  mountPath: /etc/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+                - name: ${PROMETHEUS_APP_NAME}-rules-yaml
+                  mountPath: /rules/
+                - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                  # mountPath: /${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+                  mountPath: /data
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}
+        name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+          # TODO: use proxy_cache_path with a PVC to keep caching (https://www.digitalocean.com/community/tutorials/understanding-nginx-http-proxying-load-balancing-buffering-and-caching)
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_A}.yaml: |
+          global:
+            scrape_interval: 5m # By default, scrape targets every 15 seconds. 
+            evaluation_interval: 5m
+            external_labels:
+              monitor: 'mo-dpm-${PROMETHEUS_APP_NAME}'
+          alerting:
+            alertmanagers:
+              - static_configs:
+                - targets:
+                  - ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}.${OPENSHIFT_NAMESPACE}.svc:000
+          scrape_configs:
+            - job_name: ${PROMETHEUS_APP_NAME}
+              scrape_interval: 5m
+              static_configs:
+                - targets: ['localhost:000']
+            - job_name: ${PUSHGATEWAY_APP_NAME}
+              static_configs:
+                - targets:
+                  - ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}.${OPENSHIFT_NAMESPACE}.svc:000
+              scrape_interval: 5m #I am okay with a 5 minute timespan from the moment an alert should trigger to when it actually triggers.
+              metric_relabel_configs:
+              - regex: 'instance'
+                action: labeldrop
+              - regex: 'job'
+                action: labeldrop
+          rule_files: 
+            - /rules/${PROMETHEUS_APP_NAME}-rules.yaml
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}
+        name: ${PROMETHEUS_APP_NAME}-rules-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+          # to test this file: 
+          # download prometheus to a folder: https://prometheus.io/download/
+          # open a terminal in that folder
+          # $ ./promtool check config ../visorPrometheus/prometheus-rules.yaml  # currently isn't working for me, keeps complaining "field groups not found in type config.plain". 000-03-22_20.49
+        ${PROMETHEUS_APP_NAME}-rules.yaml: >-
+          groups:
+            - name: recordings
+              rules:
+              - record: stat__next_runtime__second_ago  # this is used to show whether the script missed a run cycle. If this metric ever rises above 0, it missed a run cycle.
+                expr: time() - next_expected_unixtime
+                labels:
+                  stat: true  # "stat" for statistic, so as to differentiate the script sourced timeseries from the rule-based calculated statistics
+
+              # - record: stat__offset
+              #   expr: ({exported_job=~"visor_.*", stat="", monitor="true"} * 1)  # *1 is necessary so that the record is treated as a calculation  # necessary so that when I average for multiple weeks with the 'without' flag the current value is included, too.  # decided I didn't want the current value in the average nor stddev
+              #   labels:
+              #     offset: 0d
+              #     stat: true
+              - record: stat__offset
+                expr: ({exported_job=~"visor_.*", stat="", monitor="true"} offset 7d)
+                labels:
+                  offset: 7d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="7d"} offset 7d)
+                labels:
+                  offset: 14d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="14d"} offset 7d)
+                labels:
+                  offset: 21d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="21d"} offset 7d)
+                labels:
+                  offset: 28d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="28d"} offset 7d)
+                labels:
+                  offset: 35d
+                  stat: true
+
+              - alert: multiple_stddev_diff__precision3h 
+                # avg - current / stddev
+                # subqueries: https://prometheus.io/blog/000/01/28/subquery-support/; I am using the default resolution, which is the global evaluation_interval.
+                # three standard deviations is something like 99.5% likelihood. I may need to adjust this.
+                # "< +Inf" so that metrics that haven't had enough time to gather an accurate day of week average don't false alarm; also prevents the false alarms from the metrics that are normally zero. (may be problem for URL monitoring)
+                expr: (
+                  abs(
+                    (
+                      avg_over_time(avg without (offset) (stat__offset{freq="000"}) [3h:])
+                      - 
+                      {exported_job=~"visor_.*", stat="", monitor="true", freq="000"}
+                    ) 
+                    / 
+                    avg_over_time(stddev without (offset) (stat__offset{freq="000"}) [3h:])
+                  )
+                  > 3 < +Inf
+                  )
+                for: 3h  # these alerts are split to allow for more precise alerting if need be, indicated by the freq="5m" label.
+                labels:
+                  severity: slack
+                  stat: true
+                annotations:
+                  title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+                  description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              - alert: multiple_stddev_diff__precision15m
+                expr: (
+                  abs(
+                    (
+                      avg_over_time(avg without (offset) (stat__offset{freq="60"}) [15m:])
+                      - 
+                      {exported_job=~"visor_.*", stat="", monitor="true", freq="60"}
+                    ) 
+                    / 
+                    avg_over_time(stddev without (offset) (stat__offset{freq="60"}) [15m:])
+                  )
+                  > 3 < +Inf
+                  )
+                for: 15m
+                labels:
+                  severity: slack
+                  stat: true
+                annotations:
+                  title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+                  description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              # - alert: multiple_stddev_diff
+              #   expr: (
+              #     abs(
+              #       (
+              #         avg_over_time(avg without (offset) (stat__offset) [3h:])
+              #         - 
+              #         {exported_job=~"visor_.*", stat="", monitor="true"}
+              #       ) 
+              #       / 
+              #       avg_over_time(stddev without (offset) (stat__offset) [3h:])
+              #     )
+              #     > 5 < +Inf
+              #     )
+              #   for: 1h
+              #   labels:
+              #     severity: slack
+              #     stat: true
+              #   annotations:
+              #     title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+              #     description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              # - alert: connection  # to test communication with alertmanager
+              #   expr: vector(1) > 0
+              #   labels:
+              #     severity: slack
+              #   annotations:
+              #     title: "does Alertmanager receive alerts from Prometheus"
+              #     description: "{{ $labels.__name__ }} of job {{ $labels.exported_job }} is different from the expected value by {{ $value }} standard deviations."
+              #     # average: {{ avg_over_time(last_success_unixtime{exported_job="visor_eloqua_cdo"} [3h]) }}  # failed attempt at telling us the relevant values without having to look
+
+
+  ############################################################### ALERTMANAGER_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-tls
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${ALERTMANAGER_MEMORY}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+              deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+          spec:
+            securityContext:  
+              supplementalGroups:
+                - 000  # I don't know what this is for.
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-tls
+                  defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${ALERTMANAGER_APP_NAME}-yaml
+                configMap:
+                  name: ${ALERTMANAGER_APP_NAME}-yaml
+              - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                persistentVolumeClaim:
+                  claimName: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-pvc
+              - name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}
+              image: ${ALERTMANAGER_IMAGE_BASE_URI}
+              args:
+                - '--config.file=/etc/${ALERTMANAGER_APP_NAME}/${ALERTMANAGER_APP_NAME}.yaml'
+                - '--storage.path=/${ALERTMANAGER_APP_NAME}'
+                - '--web.external-url=http://localhost:000/' # not sure why the 1 is necessary
+                - '--web.route-prefix=/'
+              imagePullPolicy: Always
+              resources:
+                limits:  # limits chosen arbitrarily
+                  memory: ${ALERTMANAGER_MEMORY}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              livenessProbe:
+                failureThreshold: 3
+                periodSeconds: 10
+                successThreshold: 1
+                tcpSocket:
+                  port: 000
+                timeoutSeconds: 60
+              volumeMounts:
+                - name: ${ALERTMANAGER_APP_NAME}-yaml
+                  mountPath: /etc/${ALERTMANAGER_APP_NAME}
+                - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                  mountPath: /${ALERTMANAGER_APP_NAME}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}
+        name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}
+        name: ${ALERTMANAGER_APP_NAME}-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        ${ALERTMANAGER_APP_NAME}.yaml: |
+          global:
+            slack_api_url: ${SLACK_API_URL_APP_NAME_FLAG_A}  # config on slack side: https://redhat-mo-alerts.slack.com/services/000?updated=1#service_setup  # to encrypt: https://REDACTED.redhat.com/docs/DOC-000#comment-000  # to place in a deploymentConfig instead of a secret I had to use encrypt-value-noencode instead of encrypt-value
+          route:
+            receiver: receiver_slack  # default  # If an alert isn't caught by a route, send it to slack.
+            group_by: [exported_job]
+            repeat_interval: 25h
+          receivers:
+          - name: receiver_slack
+            slack_configs:  # to communicate outside of openshift, egress rules must be configured; the folder structure is as follows: jenkins-project/server-locale/openshift-project; https://REDACTED.redhat.com/paas/egress-firewall-preprod/tree/master/visor/dc-us-west/visor
+            - channel: '#visor-${BRANCH}'
+              icon_url: https://avatars3.githubusercontent.com/u/000
+              title_link: "https://grafana-${OPENSHIFT_NAMESPACE}${OPENSHIFT_URL_SUFFIX}"
+              title: "{{ .CommonAnnotations.title }} | {{ .CommonLabels.alertname }}"  # https://github.com/prometheus/alertmanager/issues/000
+              text: |
+                {{ if eq .Status "firing" }}_ALERT FIRING_{{ else }}_Extinguished_{{ end }}
+                *description:* {{ .CommonAnnotations.description }}
+
+      # send_resolved: true
+      # {{ range .Alerts }}
+      #   *Alert:* {{ .Annotations.summary }}
+      #   *Description:* {{ .Annotations.description }}
+      #   *Details:*
+      #   {{ range .Labels.SortedPairs }}  *{{ .Name }}:* `{{ .Value }}`
+      #   {{ end }}
+      # {{ end }}
+
+  ############################################################### PUSHGATEWAY_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-tls
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${PUSHGATEWAY_MEMORY}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+              deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+          spec:
+            securityContext:
+              supplementalGroups:
+                - 000  # I don't know what this is for.
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-tls
+                  defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                persistentVolumeClaim:
+                  claimName: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-pvc
+              - name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}
+              image: ${PUSHGATEWAY_IMAGE_BASE_URI}
+              args:
+                - '--web.external-url=http://localhost:000/'  # try this everywhwere
+                - '--web.route-prefix=/'
+                - '--persistence.file=/${PUSHGATEWAY_APP_NAME}/pushgateway.data'  # based off https://git.app.uib.no/caleno/helm-charts/commit/87cd000fd8cd56d000dca000b000addd3cfb4?view=inline&w=1
+              imagePullPolicy: Always
+              resources:
+                limits:  # limits chosen arbitrarily
+                  memory: ${PUSHGATEWAY_MEMORY}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              livenessProbe:
+                failureThreshold: 3
+                periodSeconds: 10
+                successThreshold: 1
+                tcpSocket:
+                  port: 000
+                timeoutSeconds: 60
+              volumeMounts:
+                - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_A}-pvc
+                  mountPath: /${PUSHGATEWAY_APP_NAME}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}
+        name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}
+
+###############################################################  ###############################################################
+############################################################### APP_NAME_FLAG_B ###############################################################
+###############################################################  ###############################################################
+
+  ############################################################### PROMETHEUS_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-tls
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${PROMETHEUS_MEMORY_PVC}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+              deploymentconfig: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+          spec:
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-tls
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-yaml
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-yaml
+              - name: ${PROMETHEUS_APP_NAME}-rules-yaml
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}-rules-yaml
+              - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                persistentVolumeClaim:
+                  claimName: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-pvc
+              - name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  cpu: ${CPU}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+              image: ${PROMETHEUS_IMAGE_BASE_URI}
+              args:
+                - '--config.file=/etc/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}.yaml'
+                # - '--storage.tsdb.path=/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}'  # 
+                - '--storage.tsdb.path=/data'  # prometheus continually was losing it's last two hours of timeseries for every restart. I was afraid this was due to my unique file location. /data is the default https://github.com/prometheus/tsdb/issues/000
+                - '--web.external-url=http://localhost:000/'  # not sure why the 1 before the port number (https://www.robustperception.io/adding-basic-auth-to-prometheus-with-nginx)
+                - '--web.route-prefix=/'
+                - '--web.enable-lifecycle'  # https://www.robustperception.io/reloading-prometheus-configuration
+                # - '--web.enable-admin-api'  # will be necessary if I ever choose to use sys_maint_each_deployment.py
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  memory: ${PROMETHEUS_MEMORY} # setting requests because I think the grafana UI is slow because it doesn't have enough processing  # didn't fix the problem. 000-05-22_17.10
+                  cpu: ${CPU}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              # livenessProbe:  # continually fails
+              #   tcpSocket:
+              #     port: 000
+              volumeMounts:
+                - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-yaml
+                  mountPath: /etc/${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+                - name: ${PROMETHEUS_APP_NAME}-rules-yaml
+                  mountPath: /rules/
+                - name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                  # mountPath: /${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+                  mountPath: /data
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}
+        name: ${PROMETHEUS_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+          # TODO: use proxy_cache_path with a PVC to keep caching (https://www.digitalocean.com/community/tutorials/understanding-nginx-http-proxying-load-balancing-buffering-and-caching)
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        ${PROMETHEUS_APP_NAME}${APP_NAME_FLAG_B}.yaml: |
+          global:
+            scrape_interval: 5m # By default, scrape targets every 15 seconds. 
+            evaluation_interval: 5m
+            external_labels:
+              monitor: 'mo-dpm-${PROMETHEUS_APP_NAME}'
+          alerting:
+            alertmanagers:
+              - static_configs:
+                - targets:
+                  - ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}.${OPENSHIFT_NAMESPACE}.svc:000
+          scrape_configs:
+            - job_name: ${PROMETHEUS_APP_NAME}
+              scrape_interval: 5m
+              static_configs:
+                - targets: ['localhost:000']
+            - job_name: ${PUSHGATEWAY_APP_NAME}
+              static_configs:
+                - targets:
+                  - ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}.${OPENSHIFT_NAMESPACE}.svc:000
+              scrape_interval: 5m #I am okay with a 5 minute timespan from the moment an alert should trigger to when it actually triggers.
+              metric_relabel_configs:
+              - regex: 'instance'
+                action: labeldrop
+              - regex: 'job'
+                action: labeldrop
+          rule_files: 
+            - /rules/${PROMETHEUS_APP_NAME}-rules.yaml
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PROMETHEUS_APP_NAME}
+        name: ${PROMETHEUS_APP_NAME}-rules-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+          # to test this file: 
+          # download prometheus to a folder: https://prometheus.io/download/
+          # open a terminal in that folder
+          # $ ./promtool check config ../visorPrometheus/prometheus-rules.yaml  # currently isn't working for me, keeps complaining "field groups not found in type config.plain". 000-03-22_20.49
+        ${PROMETHEUS_APP_NAME}-rules.yaml: >-
+          groups:
+            - name: recordings
+              rules:
+              - record: stat__next_runtime__second_ago  # this is used to show whether the script missed a run cycle. If this metric ever rises above 0, it missed a run cycle.
+                expr: time() - next_expected_unixtime
+                labels:
+                  stat: true  # "stat" for statistic, so as to differentiate the script sourced timeseries from the rule-based calculated statistics
+
+              # - record: stat__offset
+              #   expr: ({exported_job=~"visor_.*", stat="", monitor="true"} * 1)  # *1 is necessary so that the record is treated as a calculation  # necessary so that when I average for multiple weeks with the 'without' flag the current value is included, too.  # decided I didn't want the current value in the average nor stddev
+              #   labels:
+              #     offset: 0d
+              #     stat: true
+              - record: stat__offset
+                expr: ({exported_job=~"visor_.*", stat="", monitor="true"} offset 7d)
+                labels:
+                  offset: 7d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="7d"} offset 7d)
+                labels:
+                  offset: 14d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="14d"} offset 7d)
+                labels:
+                  offset: 21d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="21d"} offset 7d)
+                labels:
+                  offset: 28d
+                  stat: true
+              - record: stat__offset
+                expr: (stat__offset{offset="28d"} offset 7d)
+                labels:
+                  offset: 35d
+                  stat: true
+
+              - alert: multiple_stddev_diff__precision3h 
+                # avg - current / stddev
+                # subqueries: https://prometheus.io/blog/000/01/28/subquery-support/; I am using the default resolution, which is the global evaluation_interval.
+                # three standard deviations is something like 99.5% likelihood. I may need to adjust this.
+                # "< +Inf" so that metrics that haven't had enough time to gather an accurate day of week average don't false alarm; also prevents the false alarms from the metrics that are normally zero. (may be problem for URL monitoring)
+                expr: (
+                  abs(
+                    (
+                      avg_over_time(avg without (offset) (stat__offset{freq="000"}) [3h:])
+                      - 
+                      {exported_job=~"visor_.*", stat="", monitor="true", freq="000"}
+                    ) 
+                    / 
+                    avg_over_time(stddev without (offset) (stat__offset{freq="000"}) [3h:])
+                  )
+                  > 3 < +Inf
+                  )
+                for: 3h  # these alerts are split to allow for more precise alerting if need be, indicated by the freq="5m" label.
+                labels:
+                  severity: slack
+                  stat: true
+                annotations:
+                  title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+                  description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              - alert: multiple_stddev_diff__precision15m
+                expr: (
+                  abs(
+                    (
+                      avg_over_time(avg without (offset) (stat__offset{freq="60"}) [15m:])
+                      - 
+                      {exported_job=~"visor_.*", stat="", monitor="true", freq="60"}
+                    ) 
+                    / 
+                    avg_over_time(stddev without (offset) (stat__offset{freq="60"}) [15m:])
+                  )
+                  > 3 < +Inf
+                  )
+                for: 15m
+                labels:
+                  severity: slack
+                  stat: true
+                annotations:
+                  title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+                  description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              # - alert: multiple_stddev_diff
+              #   expr: (
+              #     abs(
+              #       (
+              #         avg_over_time(avg without (offset) (stat__offset) [3h:])
+              #         - 
+              #         {exported_job=~"visor_.*", stat="", monitor="true"}
+              #       ) 
+              #       / 
+              #       avg_over_time(stddev without (offset) (stat__offset) [3h:])
+              #     )
+              #     > 5 < +Inf
+              #     )
+              #   for: 1h
+              #   labels:
+              #     severity: slack
+              #     stat: true
+              #   annotations:
+              #     title: "{{ $labels.__name__ }} | {{ $labels.exported_job }} | {{ $labels.original_name }}"
+              #     description: "{{ $value }} standard deviations from the average value at this time of the week"  # TODO: improve this message with this example: https://www.weave.works/blog/labels-in-prometheus-alerts-think-twice-before-using-them
+
+              # - alert: connection  # to test communication with alertmanager
+              #   expr: vector(1) > 0
+              #   labels:
+              #     severity: slack
+              #   annotations:
+              #     title: "does Alertmanager receive alerts from Prometheus"
+              #     description: "{{ $labels.__name__ }} of job {{ $labels.exported_job }} is different from the expected value by {{ $value }} standard deviations."
+              #     # average: {{ avg_over_time(last_success_unixtime{exported_job="visor_eloqua_cdo"} [3h]) }}  # failed attempt at telling us the relevant values without having to look
+
+
+  ############################################################### ALERTMANAGER_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-tls
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${ALERTMANAGER_MEMORY}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+              deploymentconfig: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+          spec:
+            securityContext:  
+              supplementalGroups:
+                - 000  # I don't know what this is for.
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-tls
+                  defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${ALERTMANAGER_APP_NAME}-yaml
+                configMap:
+                  name: ${ALERTMANAGER_APP_NAME}-yaml
+              - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                persistentVolumeClaim:
+                  claimName: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-pvc
+              - name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}
+              image: ${ALERTMANAGER_IMAGE_BASE_URI}
+              args:
+                - '--config.file=/etc/${ALERTMANAGER_APP_NAME}/${ALERTMANAGER_APP_NAME}.yaml'
+                - '--storage.path=/${ALERTMANAGER_APP_NAME}'
+                - '--web.external-url=http://localhost:000/' # not sure why the 1 is necessary
+                - '--web.route-prefix=/'
+              imagePullPolicy: Always
+              resources:
+                limits:  # limits chosen arbitrarily
+                  memory: ${ALERTMANAGER_MEMORY}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              livenessProbe:
+                failureThreshold: 3
+                periodSeconds: 10
+                successThreshold: 1
+                tcpSocket:
+                  port: 000
+                timeoutSeconds: 60
+              volumeMounts:
+                - name: ${ALERTMANAGER_APP_NAME}-yaml
+                  mountPath: /etc/${ALERTMANAGER_APP_NAME}
+                - name: ${ALERTMANAGER_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                  mountPath: /${ALERTMANAGER_APP_NAME}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}
+        name: ${ALERTMANAGER_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${ALERTMANAGER_APP_NAME}
+        name: ${ALERTMANAGER_APP_NAME}-yaml
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        ${ALERTMANAGER_APP_NAME}.yaml: |
+          global:
+            slack_api_url: ${SLACK_API_URL_APP_NAME_FLAG_B}  # config on slack side: https://redhat-mo-alerts.slack.com/services/000?updated=1#service_setup  # to encrypt: https://REDACTED.redhat.com/docs/DOC-000#comment-000  # to place in a deploymentConfig instead of a secret I had to use encrypt-value-noencode instead of encrypt-value
+          route:
+            receiver: receiver_slack  # default  # If an alert isn't caught by a route, send it to slack.
+            group_by: [exported_job]
+            repeat_interval: 25h
+          receivers:
+          - name: receiver_slack
+            slack_configs:  # to communicate outside of openshift, egress rules must be configured; the folder structure is as follows: jenkins-project/server-locale/openshift-project; https://REDACTED.redhat.com/paas/egress-firewall-preprod/tree/master/visor/dc-us-west/visor
+            - channel: '#visor-${BRANCH}'
+              icon_url: https://avatars3.githubusercontent.com/u/000
+              title_link: "https://grafana-${OPENSHIFT_NAMESPACE}${OPENSHIFT_URL_SUFFIX}"
+              title: "{{ .CommonAnnotations.title }} | {{ .CommonLabels.alertname }}"  # https://github.com/prometheus/alertmanager/issues/000
+              text: |
+                {{ if eq .Status "firing" }}_ALERT FIRING_{{ else }}_Extinguished_{{ end }}
+                *description:* {{ .CommonAnnotations.description }}
+
+      # send_resolved: true
+      # {{ range .Alerts }}
+      #   *Alert:* {{ .Annotations.summary }}
+      #   *Description:* {{ .Annotations.description }}
+      #   *Details:*
+      #   {{ range .Labels.SortedPairs }}  *{{ .Name }}:* `{{ .Value }}`
+      #   {{ end }}
+      # {{ end }}
+
+  ############################################################### PUSHGATEWAY_APP_NAME ###############################################################
+
+    - kind: Service  # necessary for the route's port
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        annotations:
+          service.alpha.openshift.io/serving-cert-secret-name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-tls
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        ports:
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+          - name: 000-tcp
+            port: 000
+            protocol: TCP
+            targetPort: 000
+        selector:
+            deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+
+    - kind: Route  # allows access by URL
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        port:
+            targetPort: 000-tcp
+        tls:
+          insecureEdgeTerminationPolicy: Redirect
+          termination: reencrypt
+        to:
+          kind: Service
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+          weight: 000
+        wildcardPolicy: None
+
+    - kind: PersistentVolumeClaim
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-pvc
+      spec:
+        storageClassName: glusterfs-storage
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${PUSHGATEWAY_MEMORY}
+
+    - kind: DeploymentConfig
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        namespace: ${OPENSHIFT_NAMESPACE}
+      spec:
+        replicas: ${{REPLICAS}}
+        selector:
+          deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+        strategy:
+          type: Recreate
+        template:
+          metadata:
+            labels:
+              app: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+              deploymentconfig: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+          spec:
+            securityContext:
+              supplementalGroups:
+                - 000  # I don't know what this is for.
+            volumes:
+              - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+                secret:
+                  secretName: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-tls
+                  defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                  items:
+                    - path: tls.crt
+                      key: tls.crt
+                    - path: tls.key
+                      key: tls.key
+              - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                persistentVolumeClaim:
+                  claimName: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-pvc
+              - name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+                configMap:
+                  name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+            containers: 
+
+            - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-${APP_NAME_PROXY}
+              image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}-${APP_NAME_PROXY}:${BRANCH}  # ex: REDACTED.redhat.com/REDACTED/audit-service:3.1.0-SNAPSHOT
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              readinessProbe:
+                httpGet:
+                  path: /
+                  port: 000
+                  scheme: HTTPS
+              livenessProbe:
+                tcpSocket:
+                  port: 000
+              volumeMounts:
+                - name: REDACTED
+                  mountPath: /opt/app-root/cert
+                - name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+                  mountPath: /etc/opt/rh/rh-nginx000/nginx/
+
+            - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}
+              image: ${PUSHGATEWAY_IMAGE_BASE_URI}
+              args:
+                - '--web.external-url=http://localhost:000/'  # try this everywhwere
+                - '--web.route-prefix=/'
+                - '--persistence.file=/${PUSHGATEWAY_APP_NAME}/pushgateway.data'  # based off https://git.app.uib.no/caleno/helm-charts/commit/87cd000fd8cd56d000dca000b000addd3cfb4?view=inline&w=1
+              imagePullPolicy: Always
+              resources:
+                limits:  # limits chosen arbitrarily
+                  memory: ${PUSHGATEWAY_MEMORY}
+              ports:
+                - containerPort: 000
+                  protocol: TCP
+              livenessProbe:
+                failureThreshold: 3
+                periodSeconds: 10
+                successThreshold: 1
+                tcpSocket:
+                  port: 000
+                timeoutSeconds: 60
+              volumeMounts:
+                - name: ${PUSHGATEWAY_APP_NAME}${APP_NAME_FLAG_B}-pvc
+                  mountPath: /${PUSHGATEWAY_APP_NAME}
+
+    - kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        labels:
+          app: ${APP_NAME} 
+          name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}
+        name: ${PUSHGATEWAY_APP_NAME}-${APP_NAME_PROXY}-conf
+        namespace: ${OPENSHIFT_NAMESPACE}
+      data:
+        nginx.conf: |
+          http {
+              server {
+                  listen              000;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+              server {
+                  listen              000 ssl;
+                  ssl_certificate     /opt/app-root/cert/tls.crt;
+                  ssl_certificate_key /opt/app-root/cert/tls.key;
+                  location / {
+                      proxy_pass http://localhost:000/;
+                  }
+              }
+          }
+          events {}

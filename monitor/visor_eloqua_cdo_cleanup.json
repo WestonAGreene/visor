@@ -1,0 +1,24 @@
+{
+  "000": {
+    "name": "Contacts.Inquiries",
+    "data_status_field": "Contacts_Inquiries_S_Data_Status1",
+    "fields": [
+      "DataCardIDExt",
+      "CreatedAt",
+      "UpdatedAt",
+      "Contacts_Inquiries_C_EmailAddress1",
+      "Contacts_Inquiries_A_OfferID1",
+      "Contacts_Inquiries_A_TacticID_External1",
+      "Contacts_Inquiries_F_FormData_Source1",
+      "Contacts_Inquiries_F_FormData_Trigger1"
+    ],
+    "criteria_to_delete": {
+      "Anything older than two years and two months": {
+        "day_range": {
+          "days_ago_oldest": 000,
+          "days_ago_newest": 000
+        }
+      }
+    }
+  }
+}

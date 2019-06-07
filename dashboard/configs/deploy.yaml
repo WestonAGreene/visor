@@ -1,0 +1,277 @@
+# almost the entirety of this yaml was copied from examples in the Sys Scale repo. Examples most prominently used:
+# https://REDACTED.redhat.com/REDACTED/REDACTED-luigi/blob/master/.configs/deploy.yaml
+# https://REDACTED.redhat.com/REDACTED/flask-basic-proxy/blob/master/config/container-config.yaml
+
+
+# Why a template?
+#   Allowed me to use the REDACTED
+#   Reduced copy paste errors as I could adjust a variable in one place; if I had split into each their own yaml, I'd need custom processing
+#   made more visible the customized variables
+# Why not pass the arguments to the parameters upon execution?
+#   I didn't want to modify REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+
+
+apiVersion: v1
+kind: Template
+parameters:
+- name: APP_NAME  # The application name used to group the template's objects. # defined from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+  value: dashboard
+# - name: APP_NAME_DB
+#   value: dashboard-postgresql
+# - name: MEMORY_PVC # RAM per pod; ex. 000Mi
+#   value: 0.5Gi 
+# - name: CPU  # Processing power per pod
+#   value: 000m  # limits chosen arbitrarily
+- name: OPENSHIFT_NAMESPACE   # The OpenShift project that the template is being applied to
+  value: visor
+# - name: REPO_URI
+- name: IMAGE_SOURCE_FOUNDATION  # The first portion of the image tag name
+  value: REDACTED.redhat.com
+# - name: OPENSHIFT_URL_SUFFIX  # The ending of any exposed route
+#   value: .REDACTED.redhat.com
+- name: REPLICAS  # Number of pods (three is required by managed plat standards)
+  value: '3'  # needs qoutes to be treated as string
+
+
+# parameters from /REDACTED/REDACTED/src/com/redhat/mktg_ops/pipeline/DeployApp.groovy
+# Why not use the parameters already in DeployApp? I didn't like the naming convention
+- name: BRANCH
+- name: IMAGE
+- name: NAME_SPACE
+- name: QA_SECRET_SWITCH
+- name: REGISTRY_SECRET
+
+
+metadata:
+  name: ${APP_NAME}
+  template: ${APP_NAME}
+
+labels:  # having the labels inline with the object's tabbing means the labels are applied to every object
+  namespace: ${OPENSHIFT_NAMESPACE}
+  app: ${APP_NAME}
+
+
+objects:
+
+######################## Flask ########################
+
+  - kind: Service  # necessary for the route's port
+    apiVersion: v1
+    metadata:
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: ${APP_NAME}-tls
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      ports:
+        - name: 000-tcp
+          port: 000
+          protocol: TCP
+          targetPort: 000
+      selector:
+          deploymentconfig: ${APP_NAME}
+
+  - kind: Route  # allows access by URL
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      port:
+          targetPort: 000-tcp
+      tls:
+        insecureEdgeTerminationPolicy: Redirect
+        termination: reencrypt
+      to:
+        kind: Service
+        name: ${APP_NAME}
+        weight: 000
+      wildcardPolicy: None
+
+  - kind: DeploymentConfig
+    apiVersion: v1
+    metadata:
+      name: ${APP_NAME}
+      namespace: ${OPENSHIFT_NAMESPACE}
+    spec:
+      replicas: ${{REPLICAS}}
+      selector:
+        deploymentconfig: ${APP_NAME}
+      strategy:
+        type: Rolling
+      template:
+        metadata:
+          labels:
+            deploymentconfig: ${APP_NAME}
+        spec:
+          dnsPolicy: ClusterFirst
+          securityContext:
+            supplementalGroups:
+              - 000  # I don't know what this is for.
+          restartPolicy: Always
+          terminationGracePeriodSeconds: 30
+          volumes:
+            - name: REDACTED  # without this cert, the incoming traffic would remain encrypted and show as garbled in the logs
+              secret:
+                secretName: ${APP_NAME}-tls
+                defaultMode: 000  # I don't know what this value serves; edward said something to do with making sure the values from the secret weren't accessible from within the pod.
+                items:
+                  - path: tls.crt
+                    key: tls.crt
+                  - path: tls.key
+                    key: tls.key
+          containers:
+          - name: ${APP_NAME}
+            image: ${IMAGE_SOURCE_FOUNDATION}/${OPENSHIFT_NAMESPACE}/${APP_NAME}:${BRANCH}
+            imagePullPolicy: Always
+            command: ["/bin/bash", "./run.sh"]
+            # resources:
+            #   limits: 
+            #     memory: ${MEMORY_PVC}
+            ports:
+              - containerPort: 000
+                protocol: TCP
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /health
+                port: 000
+                scheme: HTTPS
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 60
+            livenessProbe:
+              failureThreshold: 3
+              periodSeconds: 10
+              successThreshold: 1
+              tcpSocket:
+                port: 000
+              timeoutSeconds: 60
+            volumeMounts:
+              - name: REDACTED
+                mountPath: /opt/app-root/cert  # I did not need to create this file, it was already in openshift
+            env:
+              - name: HTTP_PROXY  # these proxies are necessary for the image_build.yaml, but are not necessary for deployment and allow unnecessary security volnerabiility.
+                value: ""
+              - name: HTTPS_PROXY
+                value: ""
+
+
+# ######################## PostgreSQL ########################
+
+#   - kind: PersistentVolumeClaim
+#     apiVersion: v1
+#     metadata:
+#       name: ${APP_NAME_DB}-pvc
+#     spec:
+#       storageClassName: glusterfs-storage
+#       accessModes:
+#       - ReadWriteOnce
+#       resources:
+#         requests:
+#           storage: ${MEMORY_PVC}
+
+#   - kind: Service
+#     apiVersion: v1
+#     metadata:
+#       annotations:
+#         template.openshift.io/expose-uri: 'postgres://{.spec.clusterIP}:{.spec.ports[?(.name=="${APP_NAME_DB}")].port}'
+#       name: ${APP_NAME_DB}
+#       namespace: ${OPENSHIFT_NAMESPACE}
+#     spec:
+#       ports:
+#         - name: ${APP_NAME_DB}
+#           port: 000
+#           protocol: TCP
+#           targetPort: 000
+#       selector:
+#         name: ${APP_NAME_DB}
+#       type: ClusterIP
+
+
+
+#   - kind: DeploymentConfig
+#     apiVersion: apps.openshift.io/v1
+#     metadata:
+#       annotations:
+#         template.alpha.openshift.io/wait-for-ready: 'true'
+#       name: ${APP_NAME_DB}
+#       namespace: ${OPENSHIFT_NAMESPACE}
+#     spec:
+#       replicas: ${{REPLICAS}}
+#       selector:
+#         deploymentconfig: ${APP_NAME_DB}
+#       strategy:
+#         activeDeadlineSeconds: 000
+#         recreateParams:
+#           timeoutSeconds: 000
+#         resources: {}
+#         type: Recreate
+#       template:
+#         metadata:
+#           labels:
+#             deploymentconfig: ${APP_NAME_DB}
+#         spec:
+#           securityContext:
+#             supplementalGroups:
+#               - 000  # I don't know what this is for.
+#           containers:
+#             - env:
+#                 - name: POSTGRESQL_USER
+#                   valueFrom:
+#                     secretKeyRef:
+#                       key: database-user
+#                       name: ${APP_NAME_DB}
+#                 - name: POSTGRESQL_PASSWORD
+#                   valueFrom:
+#                     secretKeyRef:
+#                       key: database-password
+#                       name: ${APP_NAME_DB}
+#                 - name: POSTGRESQL_DATABASE
+#                   valueFrom:
+#                     secretKeyRef:
+#                       key: database-name
+#                       name: ${APP_NAME_DB}
+#               image: >-
+#                 docker-registry.default.svc:000/openshift/postgresql@sha000:75b2d000b000a42bf37e000a000e7f02ba91c8ff000be3c5a74faef9d
+#               imagePullPolicy: IfNotPresent
+#               name: ${APP_NAME_DB}
+#               ports:
+#                 - containerPort: 000
+#                   protocol: TCP
+#               # livenessProbe:
+#               #   exec:
+#               #     command:
+#               #       - /usr/libexec/check-container
+#               #       - '--live'
+#               #   failureThreshold: 3
+#               #   initialDelaySeconds: 000
+#               #   periodSeconds: 10
+#               #   successThreshold: 1
+#               #   timeoutSeconds: 10
+#               # readinessProbe:
+#               #   exec:
+#               #     command:
+#               #       - /usr/libexec/check-container
+#               #   failureThreshold: 3
+#               #   initialDelaySeconds: 5
+#               #   periodSeconds: 10
+#               #   successThreshold: 1
+#               #   timeoutSeconds: 1
+#               resources:
+#                 limits:
+#                   memory: ${MEMORY_PVC}
+#               securityContext:
+#                 privileged: false
+#               volumeMounts:
+#                 - mountPath: /var/lib/pgsql/data
+#                   name: ${APP_NAME_DB}-pvc
+#           dnsPolicy: ClusterFirst
+#           restartPolicy: Always
+#           terminationGracePeriodSeconds: 30
+#           volumes:
+#             - name: ${APP_NAME_DB}-pvc
+#               persistentVolumeClaim:
+#                 claimName: ${APP_NAME_DB}-pvc
+
+

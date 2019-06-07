@@ -1,0 +1,44 @@
+{
+  "000": { 
+    "name": "Contacts.Inquiries", 
+    "date_field": "CreatedAt", 
+    "status_field": "Contacts_Inquiries_S_Data_Status1", 
+    "offer_field": "Contacts_Inquiries_A_OfferID1", 
+    "tactic_field": "Contacts_Inquiries_A_TacticID_External1", 
+    "email_field": "Contacts_Inquiries_C_EmailAddress1", 
+    "days_pulled": 0.01,
+    "date_to": "000-02-12 00:28",
+    "cdo_fields": [
+      "Contacts_Inquiries_A_Timestamp1",
+      "Contacts_Inquiries_C_Company1",
+      "Contacts_Inquiries_C_Country1",
+      "Contacts_Inquiries_C_FirstName1",
+      "Contacts_Inquiries_C_LastName1",
+      "Contacts_Inquiries_C_State_Prov1",
+      "Contacts_Inquiries_F_FormData_Source1",
+      "Contacts_Inquiries_F_FormData_Trigger1",
+      "Contacts_Inquiries_S_Offer_Member_ID_Lead1",
+      "Contacts_Inquiries_S_Tactic_Ext_Member_ID_Lead1"
+    ],
+    "custom_fields": [
+      {"name": "C_Company", "statement": "Contact.Field(C_Company)"},
+      {"name": "C_Country", "statement": "Contact.Field(C_Country)"},
+      {"name": "C_DateCreated", "statement": "Contact.Field(C_DateCreated)"},
+      {"name": "C_Do_Not_Contact1", "statement": "Contact.Field(C_Do_Not_Contact1)"},
+      {"name": "C_FirstName", "statement": "Contact.Field(C_FirstName)"},
+      {"name": "C_Has_an_Undeliverable_Email_Address1", "statement": "Contact.Field(C_Has_an_Undeliverable_Email_Address1)"},
+      {"name": "C_Invalid_Email_Address_Domain_Extension1", "statement": "Contact.Field(C_Invalid_Email_Address_Domain_Extension1)"},
+      {"name": "C_Last_Lead_Funnel_Path11", "statement": "Contact.Field(C_Last_Lead_Funnel_Path11)"},
+      {"name": "C_LastName", "statement": "Contact.Field(C_LastName)"},
+      {"name": "C_Partner_Email_Address_Domain1", "statement": "Contact.Field(C_Partner_Email_Address_Domain1)"},
+      {"name": "C_SFDCContactID", "statement": "Contact.Field(C_SFDCContactID)"},
+      {"name": "C_SFDCLeadID", "statement": "Contact.Field(C_SFDCLeadID)"},
+      {"name": "C_State_Prov", "statement": "Contact.Field(C_State_Prov)"},
+      {"name": "C_Timestamp__Last_Entered_Lead_Funnel_Date1", "statement": "Contact.Field(C_Timestamp__Last_Entered_Lead_Funnel_Date1)"},
+      {"name": "C_Timestamp__Last_Exited_Lead_Funnel_Date1", "statement": "Contact.Field(C_Timestamp__Last_Exited_Lead_Funnel_Date1)"},
+      {"name": "C_ZZ___SFDC_Contact_Created_Date1", "statement": "Contact.Field(C_ZZ___SFDC_Contact_Created_Date1)"},
+      {"name": "C_ZZ___SFDC_Lead_Created_Date1", "statement": "Contact.Field(C_ZZ___SFDC_Lead_Created_Date1)"},
+      {"name": "IsBounced", "statement": "Contact.Email.IsBounced"}
+    ]
+  }
+}
