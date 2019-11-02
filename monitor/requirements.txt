@@ -2,7 +2,7 @@ prometheus-client==0.6.0
 pyeloqua==0.5.2
 python-slugify==1.2.4
 pytz==000.2
-requests==2.20.0
+requests==2.22.0
 python-dateutil==2.6.0
 urllib3==1.24.2
 
